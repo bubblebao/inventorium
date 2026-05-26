@@ -252,6 +252,9 @@ if ($prd_id !== '') {
       </div>
     </div>
 
+    <script>
+      if (window.Inv) Inv.trackView('item', <?= json_encode($item['PrdId'] ?? $prd_id) ?>, <?= json_encode(db_str($item['PrdDescE'] ?? $item['PrdDescT'] ?? '') ?: ($item['PrdId'] ?? $prd_id)) ?>);
+    </script>
     <?php require_once __DIR__ . '/includes/footer.php'; ?>
     <?php
     exit;

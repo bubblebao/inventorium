@@ -189,9 +189,8 @@ function sort_th(string $col, string $label, string $cur_sort, string $cur_dir, 
             $is_overdue  = $due && $due !== '0000-00-00' && $due <  $today;
             $is_due_soon = $due && $due !== '0000-00-00' && !$is_overdue
                         && $due <= date('Y-m-d', strtotime('+7 days'));
-            $row_class = $is_overdue ? 'table-danger' : '';
           ?>
-          <tr class="<?= $row_class ?>" style="cursor:pointer"
+          <tr style="cursor:pointer"
               onclick="location.href='/po_detail.php?seq=<?= (int)$row['SeqNo'] ?>'">
             <td><?= fmt_date($row['PoDate']) ?></td>
             <td><code style="font-size:11px"><?= htmlspecialchars($row['PoNo']) ?></code></td>
@@ -266,5 +265,10 @@ function sort_th(string $col, string $label, string $cur_sort, string $cur_dir, 
   </div>
   <?php endif; ?>
 </div>
+
+<script>
+  // เก็บ URL ปัจจุบัน (filter + sort + page) ไว้ใช้ตอนกลับจาก PO Detail
+  sessionStorage.setItem('po_list_last_url', window.location.href);
+</script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

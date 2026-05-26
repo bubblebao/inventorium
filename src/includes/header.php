@@ -342,19 +342,32 @@ body{font-family:'Inter',system-ui,sans-serif;font-size:14px;color:var(--text);b
   .row.g-3 > .col-sm-6.col-xl-3{flex:0 0 25%;max-width:25%}
 }
 
-/* ── Tablet (≤992px): sidebar collapsed by default + compact ── */
-@media (max-width: 992px){
-  .sidebar{width:64px}
+/* ── Tablet (769-992px): sidebar collapsed by default, click ☰ → expand ── */
+@media (min-width:769px) and (max-width: 992px){
+  .sidebar{width:64px;transition:width .25s ease}
   .sidebar .sidebar-divider,.sidebar .nav-label,.sidebar .brand-text{display:none}
-  .main-area{margin-left:64px}
+  .main-area{margin-left:64px;transition:margin-left .25s ease}
+  .nav-item{padding:12px;justify-content:center;border-left:none}
+  .nav-item.active{border-left:none;border-right:3px solid var(--accent)}
+
+  /* Toggle: click ☰ → sidebar expand to full + push content */
+  .sidebar.show{width:220px;box-shadow:4px 0 16px rgba(0,0,0,.15)}
+  .sidebar.show .sidebar-divider,
+  .sidebar.show .nav-label,
+  .sidebar.show .brand-text{display:inline-block}
+  .sidebar.show .nav-item{padding:10px 20px;justify-content:flex-start;border-left:3px solid transparent}
+  .sidebar.show .nav-item.active{border-left-color:var(--accent);border-right:none}
+  .sidebar.show ~ .main-area{margin-left:220px}
+}
+
+/* ── Tablet/Mobile common compact ── */
+@media (max-width: 992px){
   .stat-card .stat-val{font-size:22px}
   .top-header{padding:0 12px;gap:8px}
   .page-content{padding:16px}
   .page-breadcrumb{font-size:13px}
   .header-search{max-width:none}
   .header-date{display:none}
-  .nav-item{padding:12px;justify-content:center;border-left:none}
-  .nav-item.active{border-left:none;border-right:3px solid var(--accent)}
   /* Compact tables for tablet */
   .table-inv thead th{padding:8px 10px;font-size:10.5px}
   .table-inv tbody td{padding:8px 10px;font-size:12.5px}
@@ -461,6 +474,8 @@ body{font-family:'Inter',system-ui,sans-serif;font-size:14px;color:var(--text);b
     </a>
     <?php endforeach; ?>
   </nav>
+  <!-- Recently Viewed (populated by JS from localStorage) -->
+  <div id="recentViewed"></div>
 </aside>
 
 <!-- ── Main Area ── -->

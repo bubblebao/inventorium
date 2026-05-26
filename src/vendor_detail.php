@@ -56,9 +56,17 @@ require_once __DIR__ . '/includes/header.php';
 
 <!-- Back + Export -->
 <div class="mb-3 d-flex justify-content-between align-items-center no-print">
-  <a href="/vendor_list.php" class="btn btn-sm btn-inv-outline" data-loading>
+  <a href="/vendor_list.php" id="backToVendors" class="btn btn-sm btn-inv-outline" data-loading>
     <i class="bi bi-arrow-left"></i> <?= t('back_to_vendors') ?>
   </a>
+  <script>
+    (function(){
+      var last = sessionStorage.getItem('vendor_list_last_url');
+      if (last && last !== window.location.href) {
+        document.getElementById('backToVendors').href = last;
+      }
+    })();
+  </script>
   <a href="/export.php?type=vendor&format=excel" class="btn btn-sm"
      style="background:#10b981;color:#fff" target="_blank">
     <i class="bi bi-file-earmark-excel me-1"></i> Export Vendors
@@ -189,5 +197,9 @@ require_once __DIR__ . '/includes/header.php';
     </div>
   </div>
 </div>
+
+<script>
+  if (window.Inv) Inv.trackView('vendor', <?= json_encode($vnd['VndCode']) ?>, <?= json_encode(db_str($vnd['VndName'])) ?>);
+</script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

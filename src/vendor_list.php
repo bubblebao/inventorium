@@ -97,4 +97,9 @@ require_once __DIR__ . '/includes/header.php';
   </div>
 </div>
 
+<script>
+  // เก็บ URL ค้นหาไว้ใช้ตอนกลับจาก Vendor Detail
+  sessionStorage.setItem('vendor_list_last_url', window.location.href);
+</script>
+
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

@@ -22,8 +22,11 @@ if (!$po) {
 
 $r_items = mysqli_query($conn, "
     SELECT d.DtlNo, d.PrdID, d.Remark, d.Qty, d.Unit,
-           d.Price, d.NetAmount, d.Amount, d.TaxAmt, d.Discount, d.Remain
-    FROM invpo1 d WHERE d.SeqNo = $seq ORDER BY d.DtlNo
+           d.Price, d.NetAmount, d.Amount, d.TaxAmt, d.Discount, d.Remain,
+           p.PrdDescE, p.PrdDescT
+    FROM invpo1 d
+    LEFT JOIN gblprod p ON p.PrdId = d.PrdID
+    WHERE d.SeqNo = $seq ORDER BY d.DtlNo
 ");
 
 $page_title  = 'PO: ' . htmlspecialchars($po['PoNo']);
@@ -48,9 +51,17 @@ require_once __DIR__ . '/includes/header.php';
 
 <!-- Action Bar -->
 <div class="mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2 no-print">
-  <a href="/po_list.php" class="btn btn-sm btn-inv-outline" data-loading>
+  <a href="/po_list.php" id="backToPoList" class="btn btn-sm btn-inv-outline" data-loading>
     <i class="bi bi-arrow-left"></i> <?= t('back_to_po_list') ?>
   </a>
+  <script>
+    (function(){
+      var last = sessionStorage.getItem('po_list_last_url');
+      if (last && last !== window.location.href) {
+        document.getElementById('backToPoList').href = last;
+      }
+    })();
+  </script>
   <div class="d-flex gap-1">
     <a href="/vendor_detail.php?vn_code=<?= urlencode($po['VndCode']) ?>"
        class="btn btn-sm btn-inv-outline" data-loading>
@@ -176,7 +187,16 @@ require_once __DIR__ . '/includes/header.php';
                 <code style="font-size:11px;color:var(--accent)"><?= htmlspecialchars($item['PrdID']) ?></code>
               </a>
             </td>
-            <td><?= htmlspecialchars(db_str($item['Remark'] ?? '')) ?></td>
+            <td>
+              <?php
+                // Description fallback: Remark > PrdDescT > PrdDescE > —
+                $desc = trim(db_str($item['Remark'] ?? ''));
+                if ($desc === '' || strcasecmp($desc, 'NULL') === 0) $desc = trim(db_str($item['PrdDescT'] ?? ''));
+                if ($desc === '' || strcasecmp($desc, 'NULL') === 0) $desc = trim(db_str($item['PrdDescE'] ?? ''));
+                if ($desc === '' || strcasecmp($desc, 'NULL') === 0) $desc = '—';
+              ?>
+              <?= htmlspecialchars($desc) ?>
+            </td>
             <td class="text-end"><?= fmt_number($item['Qty']) ?></td>
             <td><?= htmlspecialchars($item['Unit']) ?></td>
             <td class="text-end"><?= fmt_number($item['Price']) ?></td>
@@ -204,5 +224,10 @@ require_once __DIR__ . '/includes/header.php';
     </div>
   </div>
 </div>
+
+<script>
+  // Track in Recently Viewed
+  if (window.Inv) Inv.trackView('po', <?= (int)$seq ?>, <?= json_encode($po['PoNo'] . ' · ' . db_str($po['VndName'] ?? '')) ?>);
+</script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
