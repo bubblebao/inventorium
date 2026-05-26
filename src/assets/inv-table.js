@@ -197,7 +197,7 @@
       btn.type = 'button';
       btn.className = 'inv-filter-toggle btn btn-sm';
       btn.title = 'Toggle column filters';
-      btn.style.cssText = 'background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);padding:2px 10px;font-size:11.5px;border-radius:6px;margin-left:6px';
+      btn.style.cssText = 'background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);padding:2px 8px;font-size:11.5px;border-radius:6px;flex-shrink:0';
       btn.innerHTML = '<i class="bi bi-funnel"></i>';
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -208,13 +208,38 @@
           var firstInput = inputs.find(function (i) { return i; });
           if (firstInput) setTimeout(function () { firstInput.focus(); }, 50);
         } else {
-          // Clear all filters when hiding
           inputs.forEach(function (i) { if (i) i.value = ''; });
           applyFilter();
         }
       });
-      // Place button at end of header (after badge if any)
-      header.appendChild(btn);
+
+      // Insert inside existing right-side flex container (d-flex gap-1)
+      // or wrap last child + button together — avoids 3-child justify-content-between
+      var rightGroup = null;
+      var children = Array.prototype.slice.call(header.children);
+      // Look for an existing d-flex group (contains export/action buttons)
+      children.forEach(function (c) {
+        if (c.classList && (c.classList.contains('d-flex') || c.classList.contains('gap-1'))) {
+          rightGroup = c;
+        }
+      });
+
+      if (rightGroup) {
+        // Already has a flex group — just append into it
+        rightGroup.appendChild(btn);
+      } else {
+        // No flex group — wrap last child (export link) + funnel into one
+        var lastChild = header.lastElementChild;
+        if (lastChild && lastChild !== header.firstElementChild) {
+          var wrapper = document.createElement('div');
+          wrapper.style.cssText = 'display:flex;align-items:center;gap:4px';
+          header.insertBefore(wrapper, lastChild);
+          wrapper.appendChild(lastChild);
+          wrapper.appendChild(btn);
+        } else {
+          header.appendChild(btn);
+        }
+      }
     }
   }
 
