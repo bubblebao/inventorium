@@ -125,14 +125,18 @@ require_once __DIR__ . '/includes/header.php';
         </table>
       </div>
       <div class="col-md-6">
-        <div class="card" style="background:var(--surface-2);border:1px solid var(--border)">
+        <div class="card vendor-card" style="background:var(--surface-2);border:1px solid var(--border);cursor:pointer;transition:all .15s"
+             onclick="location.href='/vendor_detail.php?vn_code=<?= urlencode($po['VndCode']) ?>'"
+             onmouseover="this.style.borderColor='var(--accent)';this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 12px rgba(14,165,233,.15)'"
+             onmouseout="this.style.borderColor='var(--border)';this.style.transform='';this.style.boxShadow=''"
+             title="คลิกเพื่อดูข้อมูล Vendor">
           <div class="card-body">
-            <div class="fw-bold mb-1" style="color:var(--primary)">
-              <i class="bi bi-building me-1"></i>
-              <a href="/vendor_detail.php?vn_code=<?= urlencode($po['VndCode']) ?>"
-                 style="color:var(--primary);text-decoration:none" data-loading>
+            <div class="d-flex align-items-start justify-content-between mb-1">
+              <div class="fw-bold" style="color:var(--primary)">
+                <i class="bi bi-building me-1"></i>
                 <?= htmlspecialchars(db_str($po['VndName'])) ?>
-              </a>
+              </div>
+              <i class="bi bi-arrow-up-right" style="color:var(--accent);font-size:14px" title="ดู Vendor"></i>
             </div>
             <div style="font-size:12px;color:var(--muted)">
               <?= htmlspecialchars($po['VndCode']) ?>
@@ -179,13 +183,12 @@ require_once __DIR__ . '/includes/header.php';
             $sum_tax += (float)$item['TaxAmt'];
             $sum_amt += (float)$item['Amount'];
         ?>
-          <tr>
+          <tr style="cursor:pointer"
+              onclick="location.href='/item_history.php?prd_id=<?= urlencode($item['PrdID']) ?>'"
+              title="ดูประวัติการซื้อสินค้านี้">
             <td><?= htmlspecialchars($item['DtlNo']) ?></td>
             <td>
-              <a href="/item_history.php?prd_id=<?= urlencode($item['PrdID']) ?>"
-                 style="text-decoration:none" title="ดูประวัติการซื้อสินค้านี้">
-                <code style="font-size:11px;color:var(--accent)"><?= htmlspecialchars($item['PrdID']) ?></code>
-              </a>
+              <code style="font-size:11px;color:var(--accent)"><?= htmlspecialchars($item['PrdID']) ?></code>
             </td>
             <td>
               <?php

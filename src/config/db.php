@@ -46,6 +46,20 @@ function db_escape(string $s): string
     return mysqli_real_escape_string($conn, $s);
 }
 
+// UTF-8 (จาก browser) → TIS-620 bytes (เก็บใน DB) สำหรับใช้ใน LIKE/WHERE
+// คืน string ที่ escape แล้ว พร้อมใส่ LIKE '%...%'
+function db_search(string $s): string
+{
+    global $conn;
+    if ($s === '') return '';
+    // ถ้ามีตัวอักษรไทย → แปลง UTF-8 → TIS-620
+    if (preg_match('/[\x{0E00}-\x{0E7F}]/u', $s)) {
+        $converted = @iconv('UTF-8', 'TIS-620//IGNORE', $s);
+        if ($converted !== false && $converted !== '') $s = $converted;
+    }
+    return mysqli_real_escape_string($conn, $s);
+}
+
 function fmt_number(?string $n): string
 {
     return number_format((float)($n ?? 0), 2);

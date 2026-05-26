@@ -121,8 +121,17 @@ function exportPoDetail(string $format): void
         // Excel — simple table for data analysis
         $title   = 'PO: ' . $po['PoNo'] . ' | ' . db_str($po['VndName']);
         $headers = ['#','รหัสสินค้า','รายละเอียด','จำนวน','หน่วย','ราคา/หน่วย','ก่อนภาษี','VAT','รวม'];
+
+        // Description fallback chain
+        $descFor = function($i) {
+            $d = trim(db_str($i['Remark'] ?? ''));
+            if ($d === '' || strcasecmp($d, 'NULL') === 0) $d = trim(db_str($i['PrdDescT'] ?? ''));
+            if ($d === '' || strcasecmp($d, 'NULL') === 0) $d = trim(db_str($i['PrdDescE'] ?? ''));
+            return $d ?: '—';
+        };
+
         $data = array_map(fn($i) => [
-            $i['DtlNo'], $i['PrdID'], db_str($i['Remark']),
+            $i['DtlNo'], $i['PrdID'], $descFor($i),
             (float)$i['Qty'], $i['Unit'],
             (float)$i['Price'], (float)$i['NetAmount'],
             (float)$i['TaxAmt'], (float)$i['Amount'],
@@ -368,34 +377,45 @@ function outputPoDetailPdf(array $po, array $items): void
       </ol>
     </div>
 
-    <!-- Signature blocks — proper space for actual signing (~50mm height) -->
-    <table width="100%" style="margin-top:36px;font-size:8.5pt;color:#374151">
+    <!-- Signature blocks — generous space + breathing room + dotted date fields -->
+    <?php
+    $sigBlock = function($label) {
+        $dot = '<span style="color:#d1d5db;letter-spacing:1px">.......</span>';
+        return
+            // signing area (empty space above line)
+            '<div style="height:75px">&nbsp;</div>'.
+            // signature line
+            '<div style="border-top:1px solid #6b7280">&nbsp;</div>'.
+            // label (small uppercase)
+            '<div style="padding-top:12px;color:#9ca3af;font-size:7pt;letter-spacing:1.2px;text-transform:uppercase">'.
+              'Authorised Signature'.
+            '</div>'.
+            // gap
+            '<div style="height:8px">&nbsp;</div>'.
+            // role name (bold prominent)
+            '<div style="font-weight:bold;color:#1e3a5f;font-size:11pt;letter-spacing:.5px">'.
+              $label.
+            '</div>'.
+            // gap
+            '<div style="height:14px">&nbsp;</div>'.
+            // date row (nowrap, shorter dots)
+            '<div style="color:#6b7280;font-size:8.5pt;white-space:nowrap">'.
+              'Date&nbsp;&nbsp;'.$dot.'&nbsp;/&nbsp;'.$dot.'&nbsp;/&nbsp;'.$dot.
+            '</div>';
+    };
+    ?>
+    <table width="100%" style="margin-top:42px;font-size:8.5pt;color:#374151">
       <tr>
-        <td width="32%" style="vertical-align:bottom">
-          <div style="height:55px"></div>
-          <div style="border-top:1px solid #6b7280;padding:6px 4px 0;text-align:center;margin:0 6px">
-            <div style="color:#9ca3af;font-size:7.5pt;letter-spacing:.5px;text-transform:uppercase">Authorised Signature</div>
-            <div style="font-weight:bold;color:#1e3a5f;margin-top:2px;font-size:9pt">Purchasing</div>
-            <div style="color:#9ca3af;font-size:7.5pt;margin-top:2px">Date: ____________</div>
-          </div>
+        <td width="31%" align="center" valign="bottom" style="padding:0 8px">
+          <?= $sigBlock('Purchasing') ?>
         </td>
-        <td width="2%"></td>
-        <td width="32%" style="vertical-align:bottom">
-          <div style="height:55px"></div>
-          <div style="border-top:1px solid #6b7280;padding:6px 4px 0;text-align:center;margin:0 6px">
-            <div style="color:#9ca3af;font-size:7.5pt;letter-spacing:.5px;text-transform:uppercase">Authorised Signature</div>
-            <div style="font-weight:bold;color:#1e3a5f;margin-top:2px;font-size:9pt">Finance Controller</div>
-            <div style="color:#9ca3af;font-size:7.5pt;margin-top:2px">Date: ____________</div>
-          </div>
+        <td width="3.5%"></td>
+        <td width="31%" align="center" valign="bottom" style="padding:0 8px">
+          <?= $sigBlock('Finance Controller') ?>
         </td>
-        <td width="2%"></td>
-        <td width="32%" style="vertical-align:bottom">
-          <div style="height:55px"></div>
-          <div style="border-top:1px solid #6b7280;padding:6px 4px 0;text-align:center;margin:0 6px">
-            <div style="color:#9ca3af;font-size:7.5pt;letter-spacing:.5px;text-transform:uppercase">Authorised Signature</div>
-            <div style="font-weight:bold;color:#1e3a5f;margin-top:2px;font-size:9pt">General Manager</div>
-            <div style="color:#9ca3af;font-size:7.5pt;margin-top:2px">Date: ____________</div>
-          </div>
+        <td width="3.5%"></td>
+        <td width="31%" align="center" valign="bottom" style="padding:0 8px">
+          <?= $sigBlock('General Manager') ?>
         </td>
       </tr>
     </table>
@@ -406,40 +426,7 @@ function outputPoDetailPdf(array $po, array $items): void
     <?php
     $html = ob_get_clean();
 
-    $tmpDir = '/tmp/mpdf';
-    if (!is_dir($tmpDir)) @mkdir($tmpDir, 0775, true);
-
-    // Load Sarabun (Thai font) if available
-    $fontDir = '/var/www/html/fonts';
-    $hasSarabun = is_file($fontDir . '/Sarabun-Regular.ttf');
-    $defaultConfig    = (new \Mpdf\Config\ConfigVariables())->getDefaults();
-    $defaultFontData  = (new \Mpdf\Config\FontVariables())->getDefaults();
-    $config = [
-        'mode'             => 'utf-8',
-        'format'           => 'A4',
-        'margin_left'      => 12,
-        'margin_right'     => 12,
-        'margin_top'       => 12,
-        'margin_bottom'    => 12,
-        'default_font_size'=> 9,
-        'autoScriptToLang' => true,
-        'autoLangToFont'   => true,
-        'useSubstitutions' => true,
-        'tempDir'          => $tmpDir,
-    ];
-    if ($hasSarabun) {
-        $config['fontDir']      = array_merge($defaultConfig['fontDir'], [$fontDir]);
-        $config['fontdata']     = $defaultFontData['fontdata'] + [
-            'sarabun' => [
-                'R' => 'Sarabun-Regular.ttf',
-                'B' => 'Sarabun-Bold.ttf',
-                'useOTL' => 0xFF,
-                'useKashida' => 75,
-            ],
-        ];
-        $config['default_font'] = 'sarabun';
-    }
-    $mpdf = new \Mpdf\Mpdf($config);
+    $mpdf = makeMpdf('A4');
     $mpdf->SetTitle('PO ' . $po['PoNo']);
     $mpdf->WriteHTML($html);
     $mpdf->Output('PO_' . preg_replace('/[^A-Za-z0-9_-]/', '_', $po['PoNo']) . '_' . date('Ymd') . '.pdf', 'D');
@@ -540,20 +527,67 @@ function outputExcel(string $title, array $headers, array $data, string $filenam
 }
 
 // ─── PDF output ─────────────────────────────────────────────────────────────
-function outputPdf(string $title, array $headers, array $data, string $format): void
+// ─── Shared mPDF factory (Sarabun Thai font + common config) ────────────────
+function makeMpdf(string $format = 'A4'): \Mpdf\Mpdf
 {
-    // mPDF needs writable tmpDir — use /tmp (always writable in container)
     $tmpDir = '/tmp/mpdf';
     if (!is_dir($tmpDir)) @mkdir($tmpDir, 0775, true);
 
-    $mpdf = new \Mpdf\Mpdf([
-        'mode'        => 'utf-8',
-        'format'      => $format,
-        'margin_top'  => 15,
-        'margin_bottom' => 15,
-        'tempDir'     => $tmpDir,
-    ]);
+    $fontDir = '/var/www/html/fonts';
+    $isValidTtf = function(string $path): bool {
+        if (!is_file($path) || filesize($path) < 10000) return false;
+        $fh = @fopen($path, 'rb');
+        if (!$fh) return false;
+        $magic = fread($fh, 4); fclose($fh);
+        return $magic === "\x00\x01\x00\x00";
+    };
+    $okR  = $isValidTtf($fontDir . '/Sarabun-Regular.ttf');
+    $okB  = $isValidTtf($fontDir . '/Sarabun-Bold.ttf');
+    $okI  = $isValidTtf($fontDir . '/Sarabun-Italic.ttf');
+    $okBI = $isValidTtf($fontDir . '/Sarabun-BoldItalic.ttf');
+    $hasSarabun = $okR && $okB;
+    if (!$hasSarabun) {
+        error_log("[mPDF] Sarabun TTFs invalid — falling back to dejavusans (R=$okR B=$okB I=$okI BI=$okBI)");
+    }
 
+    $defaultConfig   = (new \Mpdf\Config\ConfigVariables())->getDefaults();
+    $defaultFontData = (new \Mpdf\Config\FontVariables())->getDefaults();
+
+    $config = [
+        'mode'             => 'utf-8',
+        'format'           => $format,
+        'margin_left'      => 12,
+        'margin_right'     => 12,
+        'margin_top'       => 12,
+        'margin_bottom'    => 12,
+        'default_font_size'=> 9,
+        'autoScriptToLang' => true,
+        'autoLangToFont'   => true,
+        'useSubstitutions' => true,
+        'tempDir'          => $tmpDir,
+    ];
+
+    if ($hasSarabun) {
+        $config['fontDir']  = array_merge($defaultConfig['fontDir'], [$fontDir]);
+        $config['fontdata'] = $defaultFontData['fontdata'] + [
+            'sarabun' => array_filter([
+                'R'  => 'Sarabun-Regular.ttf',
+                'B'  => 'Sarabun-Bold.ttf',
+                'I'  => $okI  ? 'Sarabun-Italic.ttf'     : null,
+                'BI' => $okBI ? 'Sarabun-BoldItalic.ttf' : null,
+                'useOTL'     => 0xFF,
+                'useKashida' => 75,
+            ], fn($v) => $v !== null),
+        ];
+        $config['default_font'] = 'sarabun';
+    }
+
+    return new \Mpdf\Mpdf($config);
+}
+
+function outputPdf(string $title, array $headers, array $data, string $format): void
+{
+    $mpdf = makeMpdf($format);
     $mpdf->SetTitle($title);
 
     $th_style = 'background:#1a3a5c;color:#fff;font-weight:bold;padding:6px 4px;font-size:11px;';

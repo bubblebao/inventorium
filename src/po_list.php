@@ -203,7 +203,7 @@ function sort_th(string $col, string $label, string $cur_sort, string $cur_dir, 
 
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table-inv table mb-0">
+      <table class="table-inv table mb-0" data-inv-table>
         <thead>
           <tr>
             <?= sort_th('PoDate',       t('col_date'),     $sort_key, $sort_dir, $base_params) ?>
@@ -214,12 +214,12 @@ function sort_th(string $col, string $label, string $cur_sort, string $cur_dir, 
             <?= sort_th('DeliveryDate', t('col_due_date'),  $sort_key, $sort_dir, $base_params) ?>
             <th class="d-none d-lg-table-cell"><?= t('col_loc') ?></th>
             <th class="d-none d-xl-table-cell"><?= t('recorded_by') ?></th>
-            <th></th>
+            <th data-nofilter></th>
           </tr>
         </thead>
         <tbody>
         <?php if (!$result || mysqli_num_rows($result) === 0): ?>
-          <tr><td colspan="9" class="text-center text-muted py-4"><?= t('no_data') ?></td></tr>
+          <tr class="inv-no-filter"><td colspan="9" class="text-center text-muted py-4"><?= t('no_data') ?></td></tr>
         <?php else: ?>
           <?php while ($row = mysqli_fetch_assoc($result)): ?>
           <?php

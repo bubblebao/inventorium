@@ -67,10 +67,18 @@ require_once __DIR__ . '/includes/header.php';
       }
     })();
   </script>
-  <a href="/export.php?type=vendor&format=excel" class="btn btn-sm"
-     style="background:#10b981;color:#fff" target="_blank">
-    <i class="bi bi-file-earmark-excel me-1"></i> Export Vendors
-  </a>
+  <div class="d-flex gap-1">
+    <a href="/export.php?type=po_list&vnd_code=<?= urlencode($vn_code) ?>&date_from=2000-01-01&date_to=2099-12-31&format=excel"
+       class="btn btn-sm" style="background:#10b981;color:#fff" target="_blank"
+       title="Export ประวัติ PO ของ vendor นี้ (Excel)">
+      <i class="bi bi-file-earmark-excel me-1"></i> Export PO History
+    </a>
+    <a href="/export.php?type=po_list&vnd_code=<?= urlencode($vn_code) ?>&date_from=2000-01-01&date_to=2099-12-31&format=pdf"
+       class="btn btn-sm" style="background:#ef4444;color:#fff" target="_blank"
+       title="Export ประวัติ PO ของ vendor นี้ (PDF)">
+      <i class="bi bi-file-earmark-pdf me-1"></i> PDF
+    </a>
+  </div>
 </div>
 
 <!-- Vendor Info Card -->

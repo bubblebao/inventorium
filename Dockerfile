@@ -14,9 +14,5 @@ WORKDIR /var/www/html
 COPY composer.json .
 RUN composer install --no-dev --optimize-autoloader
 
-# Download Sarabun Thai font for mPDF (used in PO PDF generation)
-RUN mkdir -p /var/www/html/fonts && \
-    curl -L -o /var/www/html/fonts/Sarabun-Regular.ttf "https://raw.githubusercontent.com/googlefonts/sarabun/main/fonts/ttf/Sarabun-Regular.ttf" && \
-    curl -L -o /var/www/html/fonts/Sarabun-Bold.ttf "https://raw.githubusercontent.com/googlefonts/sarabun/main/fonts/ttf/Sarabun-Bold.ttf"
-
+# Sarabun Thai font for mPDF — bundled via src/fonts/ (COPY src/ . below)
 COPY src/ .

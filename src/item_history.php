@@ -8,18 +8,69 @@ $search = trim($_GET['search'] ?? '');
 if ($prd_id !== '') {
     $prd_id_safe = db_escape($prd_id);
 
-    // Item info — explicit SELECT พร้อม alias (กัน schema case mismatch)
-    $r_item = mysqli_query($conn, "
-        SELECT PrdId AS PrdId, Barcode, PrdDescE, PrdDescT, VndCode, CateCode, SubCatCode,
-               BaseUnit, OnHand, LastCost, DefaultPrice, LastUpdate, Active
-        FROM gblprod WHERE PrdId = '$prd_id_safe' LIMIT 1
-    ");
+    // Item master — เอาทุก field ที่มี (SELECT *)
+    $r_item = mysqli_query($conn, "SELECT * FROM gblprod WHERE PrdId = '$prd_id_safe' LIMIT 1");
     $item = $r_item ? mysqli_fetch_assoc($r_item) : null;
 
+    // Fallback: ถ้าไม่มีใน gblprod ลองหาจาก invpo1 (มี PO history)
     if (!$item) {
-        header('Location: /item_history.php');
-        exit;
+        $r_check = mysqli_query($conn, "SELECT COUNT(*) AS c FROM invpo1 WHERE PrdID = '$prd_id_safe'");
+        $row = $r_check ? mysqli_fetch_assoc($r_check) : null;
+        if (!$row || (int)$row['c'] === 0) {
+            header('Location: /item_history.php');
+            exit;
+        }
+        // ไม่มี master record แต่มี PO history — สร้าง placeholder
+        $item = ['PrdId' => $prd_id];
     }
+
+    // Pull fallback data from invpo1 — get first non-empty for each field
+    $latest_remark = ''; $latest_unit = ''; $latest_vendor = ''; $latest_po_date = '';
+    $latest_price = 0.0; $latest_vendor_code = '';
+    $r_fb = mysqli_query($conn, "
+        SELECT d.Remark, d.Unit, d.Price, h.PoDate, h.VndCode, v.VndName
+        FROM invpo1 d
+        INNER JOIN invpo0 h ON h.SeqNo = d.SeqNo
+        LEFT JOIN gblvend v ON v.VndCode = h.VndCode
+        WHERE d.PrdID = '$prd_id_safe'
+        ORDER BY h.PoDate DESC, h.SeqNo DESC
+        LIMIT 20
+    ");
+    if ($r_fb) {
+        while ($fb = mysqli_fetch_assoc($r_fb)) {
+            if ($latest_remark === '' && trim($fb['Remark'] ?? '') !== '') $latest_remark = db_str($fb['Remark']);
+            if ($latest_unit   === '' && trim($fb['Unit']   ?? '') !== '') $latest_unit   = $fb['Unit'];
+            if ($latest_po_date === '' && !empty($fb['PoDate']) && $fb['PoDate'] !== '0000-00-00') {
+                $latest_po_date = $fb['PoDate'];
+                $latest_price   = (float)($fb['Price'] ?? 0);
+                $latest_vendor_code = $fb['VndCode'] ?? '';
+            }
+            if ($latest_vendor === '' && trim($fb['VndName'] ?? '') !== '') $latest_vendor = db_str($fb['VndName']);
+            if ($latest_remark && $latest_unit && $latest_po_date && $latest_vendor) break;
+        }
+    }
+
+    // Top vendor by purchase count (เป็น "default vendor" fallback)
+    $r_top1 = mysqli_query($conn, "
+        SELECT h.VndCode, v.VndName, COUNT(*) AS cnt
+        FROM invpo1 d
+        INNER JOIN invpo0 h ON h.SeqNo = d.SeqNo
+        LEFT JOIN gblvend v ON v.VndCode = h.VndCode
+        WHERE d.PrdID = '$prd_id_safe'
+        GROUP BY h.VndCode
+        ORDER BY cnt DESC LIMIT 1
+    ");
+    $top1 = $r_top1 ? mysqli_fetch_assoc($r_top1) : null;
+    $top_vendor_code = $top1['VndCode'] ?? '';
+    $top_vendor_name = $top1 ? db_str($top1['VndName'] ?? '') : '';
+    $top_vendor_cnt  = (int)($top1['cnt'] ?? 0);
+
+    // Helper: clean & fallback
+    $val = function($v, $fallback = '—') {
+        $v = trim((string)$v);
+        if ($v === '' || strcasecmp($v, 'NULL') === 0 || $v === '0' || $v === '0.00') return $fallback;
+        return $v;
+    };
 
     $page_title = ($GLOBALS['LANG']==='th'?'สินค้า: ':'Item: ') . htmlspecialchars($item['PrdId'] ?? $prd_id);
 
@@ -100,20 +151,126 @@ if ($prd_id !== '') {
         <div class="row g-3">
           <div class="col-md-6">
             <table class="table table-sm table-borderless mb-0" style="font-size:13px">
-              <tr><th style="width:140px;color:var(--muted)"><?= t('item_eng') ?></th><td><?= htmlspecialchars(db_str($item['PrdDescE'] ?? '')) ?></td></tr>
-              <tr><th style="color:var(--muted)"><?= t('item_thai') ?></th><td><?= htmlspecialchars(db_str($item['PrdDescT'] ?? '')) ?></td></tr>
-              <tr><th style="color:var(--muted)">Barcode</th><td><code><?= htmlspecialchars($item['Barcode'] ?? '') ?></code></td></tr>
-              <tr><th style="color:var(--muted)"><?= t('base_unit') ?></th><td><?= htmlspecialchars($item['BaseUnit'] ?? '') ?></td></tr>
-              <tr><th style="color:var(--muted)"><?= t('category') ?></th><td><?= htmlspecialchars($item['CateCode'] ?? '') ?> / <?= htmlspecialchars($item['SubCatCode'] ?? '') ?></td></tr>
+              <?php
+                $eng     = $val(db_str($item['PrdDescE'] ?? ''), '');
+                $thai    = $val(db_str($item['PrdDescT'] ?? ''), '');
+                $barcode = $val($item['Barcode'] ?? '', '');
+                $bunit   = $val($item['BaseUnit'] ?? '', $latest_unit ?: '—');
+                $catCode = trim($item['CateCode'] ?? '');
+                $subCode = trim($item['SubCatCode'] ?? '');
+
+                // Fallback: parse category from PrdId prefix (e.g. "AS02-0001" → "AS02")
+                if ($catCode === '') {
+                    if (preg_match('/^([A-Za-z]+\d*)/', (string)($item['PrdId'] ?? $prd_id), $mm)) {
+                        $catCode = $mm[1];
+                        $cat_from_code = true;
+                    }
+                }
+                $cat = $catCode . ($subCode ? ' / ' . $subCode : '');
+                $cat = $cat !== '' ? $cat : '';
+
+                // Name fallback to latest PO Remark when master empty
+                $name_fallback_label = $GLOBALS['LANG']==='th' ? ' (จาก PO)' : ' (from PO)';
+              ?>
+              <tr><th style="width:140px;color:var(--muted)"><?= t('item_eng') ?></th>
+                <td>
+                  <?php if ($eng): ?>
+                    <?= htmlspecialchars($eng) ?>
+                  <?php elseif ($latest_remark): ?>
+                    <?= htmlspecialchars($latest_remark) ?><span style="font-size:10px;color:var(--accent);font-style:italic"><?= $name_fallback_label ?></span>
+                  <?php else: ?>
+                    <span style="color:var(--muted)">—</span>
+                  <?php endif; ?>
+                </td>
+              </tr>
+              <tr><th style="color:var(--muted)"><?= t('item_thai') ?></th>
+                <td>
+                  <?php if ($thai): ?>
+                    <?= htmlspecialchars($thai) ?>
+                  <?php elseif ($latest_remark): ?>
+                    <?= htmlspecialchars($latest_remark) ?><span style="font-size:10px;color:var(--accent);font-style:italic"><?= $name_fallback_label ?></span>
+                  <?php else: ?>
+                    <span style="color:var(--muted)">—</span>
+                  <?php endif; ?>
+                </td>
+              </tr>
+              <tr><th style="color:var(--muted)">Barcode</th><td><?= $barcode ? '<code>' . htmlspecialchars($barcode) . '</code>' : '<span style="color:var(--muted)">—</span>' ?></td></tr>
+              <tr><th style="color:var(--muted)"><?= t('base_unit') ?></th><td><?= htmlspecialchars($bunit) ?></td></tr>
+              <tr><th style="color:var(--muted)"><?= t('category') ?></th>
+                <td>
+                  <?php if ($cat !== ''): ?>
+                    <?= htmlspecialchars($cat) ?>
+                    <?php if (!empty($cat_from_code)): ?><span style="font-size:10px;color:var(--accent);font-style:italic"> (<?= $GLOBALS['LANG']==='th' ? 'จากรหัส' : 'from code' ?>)</span><?php endif; ?>
+                  <?php else: ?>
+                    <span style="color:var(--muted)">—</span>
+                  <?php endif; ?>
+                </td>
+              </tr>
             </table>
           </div>
           <div class="col-md-6">
             <table class="table table-sm table-borderless mb-0" style="font-size:13px">
-              <tr><th style="width:140px;color:var(--muted)"><?= t('default_vendor') ?></th><td><?= htmlspecialchars($item['VndCode'] ?? '-') ?></td></tr>
-              <tr><th style="color:var(--muted)"><?= t('default_price') ?></th><td><?= fmt_number($item['DefaultPrice'] ?? 0) ?> <?= t('baht') ?></td></tr>
-              <tr><th style="color:var(--muted)"><?= t('last_cost') ?></th><td><strong style="color:var(--accent)"><?= fmt_number($item['LastCost'] ?? 0) ?></strong> <?= t('baht') ?></td></tr>
-              <tr><th style="color:var(--muted)"><?= t('on_hand') ?></th><td><?= fmt_number($item['OnHand'] ?? 0) ?> <?= htmlspecialchars($item['BaseUnit'] ?? '') ?></td></tr>
-              <tr><th style="color:var(--muted)"><?= t('last_update') ?></th><td><?= fmt_date($item['LastUpdate'] ?? '') ?></td></tr>
+              <?php
+                $defVendor = trim($item['VndCode'] ?? '');
+                $defPrice  = (float)($item['DefaultPrice'] ?? 0);
+                $lastCost  = (float)($item['LastCost'] ?? 0);
+                $onHand    = (float)($item['OnHand'] ?? 0);
+                $lastUpd   = $item['LastUpdate'] ?? '';
+                $avgPrice  = (float)($stat['avg_price'] ?? 0);
+
+                // Fallback chain (จาก master → จาก PO data)
+                $showVendor = $defVendor ?: $top_vendor_code;
+                $showVendorName = $defVendor ? '' : ($top_vendor_name ?: '');
+                $showPrice    = $defPrice > 0 ? $defPrice : $avgPrice;
+                $priceLabel   = $defPrice > 0 ? '' : ' (avg from PO)';
+                $showCost     = $lastCost > 0 ? $lastCost : $latest_price;
+                $costLabel    = $lastCost > 0 ? '' : ' (latest PO)';
+                $showUpdate   = ($lastUpd && $lastUpd !== '0000-00-00') ? $lastUpd : $latest_po_date;
+                $updateLabel  = ($lastUpd && $lastUpd !== '0000-00-00') ? '' : ' (last PO)';
+              ?>
+              <tr><th style="width:140px;color:var(--muted)"><?= t('default_vendor') ?></th>
+                <td>
+                  <?php if ($showVendor): ?>
+                    <?= htmlspecialchars($showVendor) ?><?php if ($showVendorName): ?> <span style="color:var(--muted)">— <?= htmlspecialchars($showVendorName) ?></span><?php endif; ?>
+                    <?php if (!$defVendor && $top_vendor_cnt): ?><span style="font-size:10px;color:var(--accent);font-style:italic">(top: <?= $top_vendor_cnt ?> PO)</span><?php endif; ?>
+                  <?php else: ?>
+                    <span style="color:var(--muted)">—</span>
+                  <?php endif; ?>
+                </td>
+              </tr>
+              <tr><th style="color:var(--muted)"><?= t('default_price') ?></th>
+                <td>
+                  <?php if ($showPrice > 0): ?>
+                    <?= fmt_number($showPrice) ?> <?= t('baht') ?>
+                    <?php if ($priceLabel): ?><span style="font-size:10px;color:var(--accent);font-style:italic"><?= $priceLabel ?></span><?php endif; ?>
+                  <?php else: ?>
+                    <span style="color:var(--muted)">—</span>
+                  <?php endif; ?>
+                </td>
+              </tr>
+              <tr><th style="color:var(--muted)"><?= t('last_cost') ?></th>
+                <td>
+                  <?php if ($showCost > 0): ?>
+                    <strong style="color:var(--accent)"><?= fmt_number($showCost) ?></strong> <?= t('baht') ?>
+                    <?php if ($costLabel): ?><span style="font-size:10px;color:var(--muted);font-style:italic"><?= $costLabel ?></span><?php endif; ?>
+                  <?php else: ?>
+                    <span style="color:var(--muted)">—</span>
+                  <?php endif; ?>
+                </td>
+              </tr>
+              <tr><th style="color:var(--muted)"><?= t('on_hand') ?></th>
+                <td><?= $onHand != 0 ? fmt_number($onHand) . ' ' . htmlspecialchars($bunit) : '<span style="color:var(--muted)">—</span>' ?></td>
+              </tr>
+              <tr><th style="color:var(--muted)"><?= t('last_update') ?></th>
+                <td>
+                  <?php if ($showUpdate): ?>
+                    <?= fmt_date($showUpdate) ?>
+                    <?php if ($updateLabel): ?><span style="font-size:10px;color:var(--muted);font-style:italic"><?= $updateLabel ?></span><?php endif; ?>
+                  <?php else: ?>
+                    <span style="color:var(--muted)">—</span>
+                  <?php endif; ?>
+                </td>
+              </tr>
             </table>
           </div>
         </div>
@@ -282,24 +439,27 @@ if ($search === '') {
     ");
 } else {
     // Smart search: split words → AND match across multiple fields
+    // ใช้ db_search() แปลง UTF-8 → TIS-620 อัตโนมัติเมื่อพิมพ์ไทย
     $words = preg_split('/\s+/', trim($search), -1, PREG_SPLIT_NO_EMPTY);
     $conds = [];
     foreach ($words as $w) {
-        $e = db_escape($w);
-        $conds[] = "(PrdId LIKE '%$e%' OR Barcode LIKE '%$e%' OR PrdDescE LIKE '%$e%' OR PrdDescT LIKE '%$e%' OR VndCode LIKE '%$e%')";
+        $e_ascii = db_escape($w);          // สำหรับ field ที่เป็น ASCII (PrdId, Barcode, VndCode)
+        $e_tis   = db_search($w);          // สำหรับ field ที่อาจเป็น TIS-620 (PrdDescT, PrdDescE)
+        $conds[] = "(PrdId LIKE '%$e_ascii%' OR Barcode LIKE '%$e_ascii%' OR PrdDescE LIKE '%$e_tis%' OR PrdDescT LIKE '%$e_tis%' OR VndCode LIKE '%$e_ascii%')";
     }
     $where = implode(' AND ', $conds);
 
     // Relevance ranking — exact PrdId > startswith > contains
     $first_word = db_escape($words[0] ?? '');
+    $first_word_tis = db_search($words[0] ?? '');
     $results = mysqli_query($conn, "
         SELECT PrdId, Barcode, PrdDescE, PrdDescT, BaseUnit, LastCost, OnHand, Active,
                CASE
-                 WHEN PrdId = '$first_word'           THEN 1
-                 WHEN PrdId   LIKE '$first_word%'     THEN 2
-                 WHEN Barcode = '$first_word'         THEN 3
-                 WHEN PrdDescE LIKE '$first_word%'    THEN 4
-                 WHEN PrdDescT LIKE '$first_word%'    THEN 5
+                 WHEN PrdId = '$first_word'             THEN 1
+                 WHEN PrdId   LIKE '$first_word%'       THEN 2
+                 WHEN Barcode = '$first_word'           THEN 3
+                 WHEN PrdDescE LIKE '$first_word_tis%'  THEN 4
+                 WHEN PrdDescT LIKE '$first_word_tis%'  THEN 5
                  ELSE 9
                END AS rank
         FROM gblprod
@@ -340,12 +500,12 @@ $showing_max  = $is_default && $result_count >= $LIMIT;
       <?php if ($is_default): ?>
         <i class="bi bi-box-seam me-1"></i>
         <?= $GLOBALS['LANG']==='th' ? 'รายการสินค้าทั้งหมด' : 'All Items' ?>
-        <span class="badge ms-1" style="background:rgba(255,255,255,.2)">
+        <span class="badge ms-1" data-inv-count style="background:rgba(255,255,255,.2)">
           <?= number_format($result_count) ?> / <?= number_format($total_items) ?>
         </span>
       <?php else: ?>
         <i class="bi bi-search me-1"></i> <?= t('item_results') ?> "<?= htmlspecialchars($search) ?>"
-        <span class="badge ms-1" style="background:rgba(255,255,255,.2)">
+        <span class="badge ms-1" data-inv-count style="background:rgba(255,255,255,.2)">
           <?= number_format($result_count) ?> <?= t('records') ?>
         </span>
       <?php endif; ?>
@@ -361,32 +521,35 @@ $showing_max  = $is_default && $result_count >= $LIMIT;
   </div>
     <div class="card-body p-0">
       <div class="table-responsive">
-        <table class="table-inv table mb-0">
+        <table class="table-inv table mb-0" data-inv-table>
           <thead>
             <tr>
-              <th><?= t('item_code') ?></th>
-              <th>Barcode</th>
-              <th><?= t('item_name') ?></th>
-              <th><?= t('col_unit') ?></th>
-              <th class="text-end"><?= t('last_cost') ?></th>
-              <th class="text-end"><?= t('on_hand') ?></th>
-              <th></th>
+              <th data-sort="text"><?= t('item_code') ?></th>
+              <th data-sort="text">Barcode</th>
+              <th data-sort="text">Name (EN)</th>
+              <th data-sort="text">Name (TH)</th>
+              <th data-sort="text"><?= t('col_unit') ?></th>
+              <th data-sort="num" class="text-end"><?= t('last_cost') ?></th>
+              <th data-sort="num" class="text-end"><?= t('on_hand') ?></th>
+              <th data-nosort></th>
             </tr>
           </thead>
           <tbody>
           <?php if (!$results || mysqli_num_rows($results) === 0): ?>
-            <tr><td colspan="7" class="text-center text-muted py-4"><?= t('no_items') ?></td></tr>
+            <tr class="inv-no-filter"><td colspan="8" class="text-center text-muted py-4"><?= t('no_items') ?></td></tr>
           <?php else: ?>
             <?php while ($p = mysqli_fetch_assoc($results)):
-              $name = db_str($p['PrdDescT'] ?: $p['PrdDescE']);
+              $name_en = db_str($p['PrdDescE'] ?? '');
+              $name_th = db_str($p['PrdDescT'] ?? '');
               $is_inactive = (int)$p['Active'] === 0;
             ?>
             <tr onclick="location.href='/item_history.php?prd_id=<?= urlencode($p['PrdId']) ?>'"
                 style="cursor:pointer;<?= $is_inactive ? 'opacity:.5' : '' ?>">
               <td><code style="font-size:11.5px"><?= htmlspecialchars($p['PrdId']) ?></code></td>
               <td style="font-size:11px;color:var(--muted)"><?= htmlspecialchars($p['Barcode']) ?></td>
+              <td><?= $name_en !== '' ? htmlspecialchars($name_en) : '<span style="color:var(--muted)">—</span>' ?></td>
               <td>
-                <?= htmlspecialchars($name) ?>
+                <?= $name_th !== '' ? htmlspecialchars($name_th) : '<span style="color:var(--muted)">—</span>' ?>
                 <?php if ($is_inactive): ?><span class="badge ms-1" style="background:var(--danger);font-size:9px">Inactive</span><?php endif; ?>
               </td>
               <td><?= htmlspecialchars($p['BaseUnit']) ?></td>

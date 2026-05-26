@@ -6,8 +6,9 @@ $search = $_GET['search'] ?? '';
 
 $where = '';
 if ($search !== '') {
-    $s = db_escape($search);
-    $where = "WHERE VndName LIKE '%$s%' OR VndCode LIKE '%$s%'";
+    $s_ascii = db_escape($search);   // VndCode, VndTel, VndTaxNo
+    $s_tis   = db_search($search);   // VndName, VndPayee (TIS-620)
+    $where = "WHERE VndName LIKE '%$s_tis%' OR VndCode LIKE '%$s_ascii%' OR VndPayee LIKE '%$s_tis%' OR VndTel LIKE '%$s_ascii%' OR VndTaxNo LIKE '%$s_ascii%'";
 }
 
 $result = mysqli_query($conn, "
@@ -42,7 +43,7 @@ require_once __DIR__ . '/includes/header.php';
   <div class="card-header-inv d-flex align-items-center justify-content-between">
     <span>
       <i class="bi bi-building me-1"></i> <?= t('vendor_list_title') ?>
-      <span class="badge ms-1" style="background:rgba(255,255,255,.2)"><?= $result ? mysqli_num_rows($result) : 0 ?></span>
+      <span class="badge ms-1" data-inv-count style="background:rgba(255,255,255,.2)"><?= $result ? mysqli_num_rows($result) : 0 ?></span>
     </span>
     <a href="/export.php?type=vendor&format=excel" class="btn btn-sm"
        style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)" target="_blank">
@@ -51,22 +52,22 @@ require_once __DIR__ . '/includes/header.php';
   </div>
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table-inv table mb-0">
+      <table class="table-inv table mb-0" data-inv-table>
         <thead>
           <tr>
-            <th><?= t('vendor_code') ?></th>
-            <th><?= t('vendor_name') ?></th>
-            <th class="d-none d-xl-table-cell"><?= t('vendor_payee') ?></th>
-            <th class="d-none d-lg-table-cell"><?= t('vendor_phone') ?></th>
-            <th class="d-none d-xl-table-cell"><?= t('vendor_taxno') ?></th>
-            <th class="text-end"><?= t('vendor_balance') ?></th>
-            <th class="text-end d-none d-md-table-cell"><?= t('vendor_credit') ?></th>
-            <th class="d-none d-xl-table-cell"><?= t('vendor_last_close') ?></th>
+            <th data-sort="text"><?= t('vendor_code') ?></th>
+            <th data-sort="text"><?= t('vendor_name') ?></th>
+            <th data-sort="text" class="d-none d-xl-table-cell"><?= t('vendor_payee') ?></th>
+            <th data-sort="text" class="d-none d-lg-table-cell"><?= t('vendor_phone') ?></th>
+            <th data-sort="text" class="d-none d-xl-table-cell"><?= t('vendor_taxno') ?></th>
+            <th data-sort="num" class="text-end"><?= t('vendor_balance') ?></th>
+            <th data-sort="num" class="text-end d-none d-md-table-cell"><?= t('vendor_credit') ?></th>
+            <th data-sort="date" class="d-none d-xl-table-cell"><?= t('vendor_last_close') ?></th>
           </tr>
         </thead>
         <tbody>
         <?php if (!$result || mysqli_num_rows($result) === 0): ?>
-          <tr><td colspan="8" class="text-center text-muted py-4"><?= t('no_data') ?></td></tr>
+          <tr class="inv-no-filter"><td colspan="8" class="text-center text-muted py-4"><?= t('no_data') ?></td></tr>
         <?php else: ?>
           <?php while ($v = mysqli_fetch_assoc($result)): ?>
           <tr style="cursor:pointer"
