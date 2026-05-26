@@ -6,16 +6,36 @@ if (!defined('PER_PAGE')) define('PER_PAGE', 50);
 
 $today = date('Y-m-d');
 
-// ── Filter inputs ──
-$date_from = $_GET['date_from'] ?? date('Y-m-01');
-$date_to   = $_GET['date_to']   ?? date('Y-m-t');
+// ─── Year range จาก DB (cached 24h — data frozen) ──────────────────────────
+$range = cache_remember('po_year_range', 86400, function() use ($conn) {
+    $r = mysqli_query($conn, "
+        SELECT MIN(YEAR(PoDate)) AS y_min, MAX(YEAR(PoDate)) AS y_max
+        FROM invpo0
+        WHERE PoDate IS NOT NULL AND PoDate <> '0000-00-00' AND YEAR(PoDate) > 1990
+    ");
+    $row = $r ? mysqli_fetch_assoc($r) : null;
+    return ['min' => (int)($row['y_min'] ?? 2020), 'max' => (int)($row['y_max'] ?? date('Y'))];
+});
+$year_min = $range['min'];
+$year_max = $range['max'];
+
+// ── Filter inputs (default = latest year)──
+$date_from = $_GET['date_from'] ?? "$year_max-01-01";
+$date_to   = $_GET['date_to']   ?? "$year_max-12-31";
 $vnd_code  = $_GET['vnd_code']  ?? '';
 $inv_no    = $_GET['inv_no']    ?? '';
 $source    = $_GET['source']    ?? '';
 $page      = max(1, (int)($_GET['page'] ?? 1));
 
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) $date_from = date('Y-m-01');
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_to))   $date_to   = date('Y-m-t');
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) $date_from = "$year_max-01-01";
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_to))   $date_to   = "$year_max-12-31";
+
+// Active year detection (for button highlight)
+$active_year = null;
+if (preg_match('/^(\d{4})-01-01$/', $date_from, $mf) && preg_match('/^(\d{4})-12-31$/', $date_to, $mt) && $mf[1] === $mt[1]) {
+    $active_year = (int)$mf[1];
+}
+$is_all_time = ($date_from === "$year_min-01-01" && $date_to === "$year_max-12-31");
 
 // ── Sort whitelist (SQL injection prevention) ──
 $sort_map   = ['PoDate' => 'h.PoDate', 'TAmt' => 'TAmt',
@@ -81,15 +101,33 @@ function sort_th(string $col, string $label, string $cur_sort, string $cur_dir, 
 }
 ?>
 
-<!-- Date Shortcut Bar -->
-<div class="date-shortcuts mb-2">
+<!-- Year Shortcut Bar -->
+<?php
+  // Preserve current filter values when switching year
+  $keep = array_filter(['vnd_code' => $vnd_code, 'inv_no' => $inv_no, 'source' => $source], fn($v) => $v !== '');
+  $build_year_url = function($from, $to) use ($keep) {
+      return '?' . http_build_query(array_merge($keep, ['date_from' => $from, 'date_to' => $to]));
+  };
+?>
+<div class="date-shortcuts mb-2" style="align-items:center;flex-wrap:wrap;gap:6px">
   <span style="font-size:12px;color:var(--muted);line-height:2"><?= t('period') ?>:</span>
-  <button type="button" class="btn btn-sm btn-inv-outline" onclick="applyDatePreset('today')"><?= t('today') ?></button>
-  <button type="button" class="btn btn-sm btn-inv-outline" onclick="applyDatePreset('week')"><?= t('week') ?></button>
-  <button type="button" class="btn btn-sm btn-inv-outline" onclick="applyDatePreset('month')"><?= t('month') ?></button>
-  <button type="button" class="btn btn-sm btn-inv-outline" onclick="applyDatePreset('last_month')"><?= t('last_month') ?></button>
-  <button type="button" class="btn btn-sm btn-inv-outline" onclick="applyDatePreset('3months')"><?= t('three_months') ?></button>
-  <button type="button" class="btn btn-sm btn-inv-outline" onclick="applyDatePreset('year')"><?= t('year') ?></button>
+  <?php for ($y = $year_max; $y >= $year_min; $y--):
+    $is_active = ($active_year === $y);
+    $cls = $is_active ? 'btn-inv-primary' : 'btn-inv-outline';
+  ?>
+    <a href="<?= htmlspecialchars($build_year_url("$y-01-01", "$y-12-31")) ?>"
+       class="btn btn-sm <?= $cls ?>"
+       data-loading
+       style="<?= $is_active ? 'box-shadow:0 0 0 2px rgba(14,165,233,.3)' : '' ?>">
+      <?php if ($y === $year_max): ?><i class="bi bi-star-fill" style="font-size:9px;color:#f59e0b"></i> <?php endif; ?><?= $y ?>
+    </a>
+  <?php endfor; ?>
+  <a href="<?= htmlspecialchars($build_year_url("$year_min-01-01", "$year_max-12-31")) ?>"
+     class="btn btn-sm <?= $is_all_time ? 'btn-inv-primary' : 'btn-inv-outline' ?>"
+     data-loading
+     style="<?= $is_all_time ? 'box-shadow:0 0 0 2px rgba(14,165,233,.3)' : '' ?>">
+    <i class="bi bi-infinity" style="font-size:11px"></i> All
+  </a>
 </div>
 
 <!-- Filter Card -->
