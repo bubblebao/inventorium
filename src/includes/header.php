@@ -20,6 +20,9 @@ $qs_arr['lang'] = $GLOBALS['LANG'] === 'th' ? 'en' : 'th';
 $lang_switch_url = '?' . http_build_query($qs_arr);
 $next_lang_label = $GLOBALS['LANG'] === 'th' ? 'EN' : 'TH';
 $next_lang_flag  = $GLOBALS['LANG'] === 'th' ? '🇺🇸' : '🇹🇭';
+
+// Theme (light/dark) — cookie based
+$current_theme = $_COOKIE['inv_theme'] ?? 'light';
 ?>
 <!DOCTYPE html>
 <html lang="th">
@@ -35,7 +38,7 @@ $next_lang_flag  = $GLOBALS['LANG'] === 'th' ? '🇺🇸' : '🇹🇭';
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
-/* ── Variables ── */
+/* ── Variables (Light theme — default) ── */
 :root{
   --primary:#1e3a5f; --primary-lt:#2d5a8e;
   --accent:#0ea5e9;  --gold:#f59e0b;
@@ -45,6 +48,123 @@ $next_lang_flag  = $GLOBALS['LANG'] === 'th' ? '🇺🇸' : '🇹🇭';
   --text:#1e293b; --muted:#64748b;
   --sidebar-w:220px;
 }
+
+/* ── Dark theme overrides ── */
+body.dark{
+  --bg:#0f172a; --surface:#1e293b; --surface-2:#0f172a;
+  --border:#334155;
+  --text:#e2e8f0; --muted:#94a3b8;
+  --primary:#1e3a5f; --primary-lt:#2d5a8e;
+}
+body.dark{color:var(--text)}
+
+/* ── Cards / Layout ── */
+body.dark .card{box-shadow:0 1px 3px rgba(0,0,0,.4),0 1px 2px rgba(0,0,0,.3);background:var(--surface);color:var(--text)}
+body.dark .card-body{color:var(--text)}
+body.dark .top-header{background:var(--surface);border-bottom-color:var(--border)}
+body.dark .card-footer{background:var(--surface-2)!important;border-top-color:var(--border)!important;color:var(--text)}
+
+/* ── Form inputs ── */
+body.dark .form-control,body.dark .form-select,body.dark .header-search input{
+  background:var(--surface-2)!important;color:var(--text)!important;border-color:var(--border)!important}
+body.dark .form-control:focus,body.dark .form-select:focus{background:var(--surface)!important}
+body.dark .form-control::placeholder,body.dark .header-search input::placeholder{color:var(--muted)}
+body.dark .form-label{color:var(--text)!important}
+body.dark input[type="date"]{color-scheme:dark}
+
+/* ── Tables (forced override Bootstrap defaults) ── */
+body.dark .table,body.dark .table-inv{
+  --bs-table-color:var(--text);--bs-table-bg:transparent;
+  --bs-table-striped-color:var(--text);--bs-table-hover-color:var(--text);
+  --bs-table-border-color:var(--border);color:var(--text)}
+body.dark .table-inv tbody tr{border-bottom-color:var(--border)}
+body.dark .table-inv tbody tr:nth-child(even){background:rgba(255,255,255,.03)}
+body.dark .table-inv tbody tr:hover,
+body.dark .table-inv tbody tr:nth-child(even):hover{background:rgba(14,165,233,.15)!important}
+body.dark .table tbody td,
+body.dark .table-inv tbody td,
+body.dark .table tbody td *,
+body.dark .table-inv tbody td *{color:var(--text)!important}
+body.dark .table tbody td .text-muted,
+body.dark .table-inv tbody td .text-muted,
+body.dark .table tbody td small,
+body.dark .table-inv tbody td small,
+body.dark .table tbody td [style*="--muted"],
+body.dark .table-inv tbody td [style*="--muted"]{color:var(--muted)!important}
+body.dark .table tbody td code,
+body.dark .table-inv tbody td code{color:#7dd3fc!important;background:rgba(125,211,252,.1)}
+body.dark .table tbody tr{border-color:var(--border)}
+body.dark .table-striped tbody tr:nth-of-type(odd){background:rgba(255,255,255,.03);color:var(--text)}
+body.dark .table-hover tbody tr:hover{background:rgba(14,165,233,.15);color:var(--text)}
+body.dark thead th{color:#cbd5e1!important}
+
+/* ── Bootstrap utility overrides ── */
+body.dark .text-muted{color:var(--muted)!important}
+body.dark .text-secondary{color:var(--muted)!important}
+body.dark .text-dark{color:var(--text)!important}
+body.dark .fw-bold,body.dark .fw-semibold{color:inherit}
+body.dark small{color:var(--muted)}
+
+/* ── Code blocks ── */
+body.dark code{color:#7dd3fc;background:rgba(125,211,252,.1);padding:1px 6px;border-radius:3px}
+
+/* ── Inline style fixes (var(--muted) text) ── */
+body.dark [style*="color:var(--muted)"],
+body.dark [style*="color: var(--muted)"]{color:var(--muted)!important}
+body.dark [style*="color:var(--text)"]{color:var(--text)!important}
+body.dark [style*="color:var(--primary)"]:not(.card-header-inv){color:#7dd3fc!important}
+body.dark [style*="background:var(--surface-2)"]{background:var(--surface-2)!important}
+
+/* ── Stat cards ── */
+body.dark .stat-card .stat-val{color:var(--text)}
+body.dark .stat-card .stat-label{color:var(--muted)}
+
+/* ── Buttons ── */
+body.dark .btn-inv-outline{background:var(--surface);color:var(--text);border-color:var(--border)}
+body.dark .btn-inv-outline:hover{background:var(--surface-2)}
+body.dark .lang-switch,body.dark .user-btn,body.dark .theme-toggle{background:var(--surface-2);color:var(--text);border-color:var(--border)}
+body.dark .user-dropdown{background:var(--surface);border-color:var(--border);box-shadow:0 8px 24px rgba(0,0,0,.5)}
+body.dark .dropdown-item{color:var(--text)}
+body.dark .dropdown-item:hover{background:var(--surface-2)}
+
+/* ── Pagination ── */
+body.dark .page-link{background:var(--surface);color:var(--text);border-color:var(--border)}
+body.dark .page-item.active .page-link{background:var(--accent);border-color:var(--accent);color:#fff}
+body.dark .page-item.disabled .page-link{background:var(--surface-2);color:var(--muted);border-color:var(--border)}
+
+/* ── Loading overlay ── */
+body.dark .loading-overlay{background:rgba(15,23,42,.85)}
+
+/* ── Badges (เพิ่มสีให้ contrast ดีใน dark) ── */
+body.dark .badge-normal  {background:#1e3a5f;color:#bae6fd;border-color:#1e40af}
+body.dark .badge-src     {background:#334155;color:#e2e8f0;border-color:#475569}
+body.dark .badge-overdue {background:rgba(239,68,68,.18);color:#fca5a5;border-color:#7f1d1d}
+body.dark .badge-due-soon{background:rgba(245,158,11,.2);color:#fcd34d;border-color:#78350f}
+body.dark .badge-paid    {background:rgba(16,185,129,.18);color:#86efac;border-color:#14532d}
+body.dark .badge.bg-secondary{background:#334155!important;color:#cbd5e1!important}
+
+/* ── Bootstrap alert ── */
+body.dark .alert-info{background:#0c4a6e!important;color:#7dd3fc!important;border-color:#0369a1!important}
+body.dark .alert-warning{background:#451a03!important;color:#fcd34d!important;border-color:#92400e!important}
+
+/* ── Links ── */
+body.dark a:not(.btn):not(.dropdown-item):not(.nav-item):not(.card-header-inv a){color:#7dd3fc}
+body.dark a:not(.btn):not(.dropdown-item):hover{color:#38bdf8}
+
+/* ── Chart canvas — ปรับให้สีตัดกับพื้นมืด ── */
+body.dark canvas{filter:brightness(1.05)}
+
+/* ── Item history & detail (specific) ── */
+body.dark .text-success{color:#86efac!important}
+body.dark .text-danger{color:#fca5a5!important}
+body.dark .text-warning{color:#fcd34d!important}
+
+/* ── Date shortcut bar ── */
+body.dark .date-shortcuts .btn-inv-outline{background:var(--surface);color:var(--text)}
+
+/* ── Tfoot ── */
+body.dark tfoot{background:var(--surface-2)!important;color:var(--text)}
+body.dark tfoot td{color:var(--text)!important}
 
 /* ── Reset ── */
 *{box-sizing:border-box}
@@ -101,6 +221,10 @@ body{font-family:'Inter',system-ui,sans-serif;font-size:14px;color:var(--text);b
   box-shadow:0 2px 6px rgba(14,165,233,.25)}
 .lang-flag{font-size:14px;line-height:1}
 .lang-label{letter-spacing:.3px}
+.theme-toggle{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;
+  border-radius:50%;background:var(--surface-2);color:var(--text);border:1px solid var(--border);
+  cursor:pointer;transition:all .2s;font-size:14px}
+.theme-toggle:hover{background:var(--accent);color:#fff;border-color:var(--accent);transform:rotate(15deg)}
 .user-menu{position:relative}
 .user-btn{display:inline-flex;align-items:center;gap:8px;padding:5px 12px 5px 6px;
   border-radius:20px;background:var(--surface-2);color:var(--text);text-decoration:none;
@@ -181,8 +305,15 @@ body{font-family:'Inter',system-ui,sans-serif;font-size:14px;color:var(--text);b
   .btn{display:none!important}
 }
 </style>
+<script>
+// Apply theme BEFORE body renders → ไม่มี flash of light
+(function(){
+  var theme = document.cookie.match(/inv_theme=(dark|light)/);
+  if (theme && theme[1] === 'dark') document.documentElement.setAttribute('data-pre-dark','1');
+})();
+</script>
 </head>
-<body>
+<body class="<?= $current_theme === 'dark' ? 'dark' : '' ?>">
 
 <div class="loading-overlay" id="loadingOverlay">
   <div class="text-center">
@@ -235,6 +366,9 @@ body{font-family:'Inter',system-ui,sans-serif;font-size:14px;color:var(--text);b
   </form>
 
   <div class="header-right">
+    <button type="button" class="theme-toggle" id="themeToggle" title="Toggle dark/light mode">
+      <i class="bi bi-<?= $current_theme === 'dark' ? 'sun' : 'moon' ?>-fill"></i>
+    </button>
     <a href="<?= htmlspecialchars($lang_switch_url) ?>" class="lang-switch" title="Switch language">
       <span class="lang-flag"><?= $next_lang_flag ?></span>
       <span class="lang-label"><?= $next_lang_label ?></span>

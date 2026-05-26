@@ -2,6 +2,11 @@
 require_once __DIR__ . '/config/auth.php';
 
 $error = '';
+$info  = '';
+
+if (($_GET['reason'] ?? '') === 'timeout') {
+    $info = 'Session หมดอายุ (ไม่มี activity 8 ชั่วโมง) — กรุณา login ใหม่';
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $u = $_POST['username'] ?? '';
@@ -79,6 +84,13 @@ body{margin:0;font-family:'Inter',system-ui,sans-serif;background:linear-gradien
     <div class="error-box">
       <i class="bi bi-exclamation-triangle-fill"></i>
       <span><?= htmlspecialchars($error) ?></span>
+    </div>
+  <?php endif; ?>
+
+  <?php if ($info): ?>
+    <div class="error-box" style="background:#fffbeb;border-color:#fcd34d;color:#b45309">
+      <i class="bi bi-clock-history"></i>
+      <span><?= htmlspecialchars($info) ?></span>
     </div>
   <?php endif; ?>
 

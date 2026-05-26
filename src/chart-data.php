@@ -6,10 +6,15 @@ header('Cache-Control: no-store');
 $type = $_GET['type'] ?? 'monthly';
 
 if ($type === 'monthly') {
-    // Last 12 months including current
-    $d = new DateTime('first day of this month');
+    // Anchor วันที่สำหรับ "12 เดือนล่าสุด" (default = today, แต่ Dashboard ส่ง latest_date มา)
+    $anchor = $_GET['anchor'] ?? date('Y-m-d');
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $anchor)) $anchor = date('Y-m-d');
+
+    $d = new DateTime($anchor);
+    $d->modify('first day of this month');
+    $end = $d->format('Y-m-t');           // วันสุดท้ายของเดือน anchor
     $d->modify('-11 months');
-    $from = $d->format('Y-m-d');
+    $from = $d->format('Y-m-d');          // 12 เดือนก่อน
 
     $result = mysqli_query($conn, "
         SELECT DATE_FORMAT(h.PoDate, '%Y-%m') AS month,
@@ -17,7 +22,7 @@ if ($type === 'monthly') {
                SUM(d.Amount) AS total
         FROM invpo0 h
         LEFT JOIN invpo1 d ON d.SeqNo = h.SeqNo
-        WHERE h.PoDate >= '" . db_escape($from) . "'
+        WHERE h.PoDate BETWEEN '" . db_escape($from) . "' AND '" . db_escape($end) . "'
         GROUP BY DATE_FORMAT(h.PoDate, '%Y-%m')
         ORDER BY month ASC
     ");

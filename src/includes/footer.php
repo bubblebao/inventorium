@@ -4,6 +4,19 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+// Dark mode toggle
+(function(){
+  var btn = document.getElementById('themeToggle');
+  if (!btn) return;
+  btn.addEventListener('click', function(){
+    var isDark = document.body.classList.toggle('dark');
+    var theme  = isDark ? 'dark' : 'light';
+    document.cookie = 'inv_theme=' + theme + ';path=/;max-age=' + (365*24*3600) + ';SameSite=Lax';
+    var icon = btn.querySelector('i');
+    if (icon) icon.className = 'bi bi-' + (isDark ? 'sun' : 'moon') + '-fill';
+  });
+})();
+
 // Sidebar collapse
 document.getElementById('sidebarToggle').addEventListener('click', function() {
     document.getElementById('sidebar').classList.toggle('collapsed');

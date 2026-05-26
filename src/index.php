@@ -2,57 +2,82 @@
 require_once __DIR__ . '/config/db.php';
 $page_title = t('dashboard');
 
-$today        = date('Y-m-d');
-$first_day    = date('Y-m-01');
-$last_day     = date('Y-m-t');
-$due_soon_end = date('Y-m-d', strtotime('+7 days'));
+// ─── Historical Stats (cached 24h — data frozen) ──────────────────────────
 
-// This month PO stats — JOIN invpo1 เพื่อ SUM ยอด
-$r = mysqli_query($conn, "
-    SELECT COUNT(DISTINCT h.SeqNo) AS cnt, SUM(d.Amount) AS total
-    FROM invpo0 h
-    LEFT JOIN invpo1 d ON d.SeqNo = h.SeqNo
-    WHERE h.PoDate BETWEEN '$first_day' AND '$last_day'
-");
-$stats_month = ($r ? mysqli_fetch_assoc($r) : null) ?: ['cnt' => 0, 'total' => 0];
+// 1. Latest PO date (anchor สำหรับทุก period query)
+$latest_date = cache_remember('latest_po_date', 86400, function() use ($conn) {
+    $r = mysqli_query($conn, "
+        SELECT MAX(PoDate) AS d FROM invpo0
+        WHERE PoDate IS NOT NULL AND PoDate <> '0000-00-00'
+    ");
+    return ($r ? mysqli_fetch_assoc($r) : null)['d'] ?? date('Y-m-d');
+});
 
-// Due soon count (delivery date in next 7 days)
-$r2 = mysqli_query($conn, "
-    SELECT COUNT(*) AS cnt FROM invpo0
-    WHERE DeliveryDate >= '$today' AND DeliveryDate <= '$due_soon_end'
-      AND DeliveryDate <> '0000-00-00'
-");
-$due_cnt = (int)(($r2 ? mysqli_fetch_assoc($r2) : null)['cnt'] ?? 0);
+// คำนวณช่วง 12 เดือนล่าสุดจาก latest_date
+$period_end   = $latest_date;
+$period_start = date('Y-m-d', strtotime($latest_date . ' -12 months'));
 
-// Vendor total count
-$r3 = mysqli_query($conn, "SELECT COUNT(*) AS cnt FROM gblvend");
-$vnd_cnt = (int)(($r3 ? mysqli_fetch_assoc($r3) : null)['cnt'] ?? 0);
+// 2. Total POs (all time)
+$total_pos = cache_remember('total_pos_all', 86400, function() use ($conn) {
+    $r = mysqli_query($conn, "SELECT COUNT(*) AS c FROM invpo0");
+    return (int)(($r ? mysqli_fetch_assoc($r) : null)['c'] ?? 0);
+});
 
-// Due soon list — uses correlated subquery for total
-$r_due = mysqli_query($conn, "
-    SELECT h.SeqNo, h.PoDate, h.PoNo, h.VndCode, v.VndName, h.DeliveryDate,
-           (SELECT SUM(Amount) FROM invpo1 WHERE SeqNo = h.SeqNo) AS TAmt
-    FROM invpo0 h LEFT JOIN gblvend v ON h.VndCode = v.VndCode
-    WHERE h.DeliveryDate >= '$today' AND h.DeliveryDate <= '$due_soon_end'
-      AND h.DeliveryDate <> '0000-00-00'
-    ORDER BY h.DeliveryDate ASC
-    LIMIT 8
-");
+// 3. Total Spending (all time) — heavy! cache 24h
+$total_spending = cache_remember('total_spending_all', 86400, function() use ($conn) {
+    $r = mysqli_query($conn, "SELECT SUM(Amount) AS s FROM invpo1");
+    return (float)(($r ? mysqli_fetch_assoc($r) : null)['s'] ?? 0);
+});
 
-// Top 5 vendors this month
-$r_top = mysqli_query($conn, "
-    SELECT h.VndCode, v.VndName,
-           COUNT(DISTINCT h.SeqNo) AS cnt, SUM(d.Amount) AS total
-    FROM invpo0 h
-    LEFT JOIN gblvend v ON h.VndCode = v.VndCode
-    LEFT JOIN invpo1 d ON d.SeqNo = h.SeqNo
-    WHERE h.PoDate BETWEEN '$first_day' AND '$last_day'
-    GROUP BY h.VndCode
-    ORDER BY total DESC
-    LIMIT 5
-");
+// 4. Active Vendors (มี PO ในช่วง 12 เดือนล่าสุดจาก latest)
+$active_vendors = cache_remember("active_vendors_{$period_start}", 86400, function() use ($conn, $period_start, $period_end) {
+    $r = mysqli_query($conn, "
+        SELECT COUNT(DISTINCT VndCode) AS c FROM invpo0
+        WHERE PoDate BETWEEN '$period_start' AND '$period_end'
+    ");
+    return (int)(($r ? mysqli_fetch_assoc($r) : null)['c'] ?? 0);
+});
 
-// Recent 10 POs — uses correlated subquery for total
+// Total vendors master
+$total_vendors = cache_remember('total_vendors', 86400, function() use ($conn) {
+    $r = mysqli_query($conn, "SELECT COUNT(*) AS c FROM gblvend");
+    return (int)(($r ? mysqli_fetch_assoc($r) : null)['c'] ?? 0);
+});
+
+// 5. Top 5 Locations (last 12 months from latest)
+$top_locations = cache_remember("top_loc_{$period_start}", 3600, function() use ($conn, $period_start, $period_end) {
+    $r = mysqli_query($conn, "
+        SELECT h.LocaCode,
+               COUNT(DISTINCT h.SeqNo) AS po_cnt,
+               SUM(d.Amount)          AS total
+        FROM invpo0 h
+        LEFT JOIN invpo1 d ON d.SeqNo = h.SeqNo
+        WHERE h.PoDate BETWEEN '$period_start' AND '$period_end'
+          AND h.LocaCode IS NOT NULL AND h.LocaCode <> ''
+        GROUP BY h.LocaCode
+        ORDER BY total DESC
+        LIMIT 5
+    ");
+    return $r ? mysqli_fetch_all($r, MYSQLI_ASSOC) : [];
+});
+
+// 6. Top 5 vendors (last 12 months from latest)
+$top_vendors = cache_remember("top_vendors_{$period_start}", 3600, function() use ($conn, $period_start, $period_end) {
+    $r = mysqli_query($conn, "
+        SELECT h.VndCode, v.VndName,
+               COUNT(DISTINCT h.SeqNo) AS cnt, SUM(d.Amount) AS total
+        FROM invpo0 h
+        LEFT JOIN gblvend v ON h.VndCode = v.VndCode
+        LEFT JOIN invpo1 d ON d.SeqNo = h.SeqNo
+        WHERE h.PoDate BETWEEN '$period_start' AND '$period_end'
+        GROUP BY h.VndCode
+        ORDER BY total DESC
+        LIMIT 5
+    ");
+    return $r ? mysqli_fetch_all($r, MYSQLI_ASSOC) : [];
+});
+
+// 7. Recent 10 POs (always latest)
 $r_recent = mysqli_query($conn, "
     SELECT h.SeqNo, h.PoDate, h.PoNo, h.VndCode, v.VndName,
            h.LocaCode, h.DeliveryDate,
@@ -62,19 +87,53 @@ $r_recent = mysqli_query($conn, "
     LIMIT 10
 ");
 
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+// Format large number → "1.5B" / "234M" / "12K"
+function fmt_compact(float $n): string {
+    if ($n >= 1e9) return number_format($n / 1e9, 2) . 'B';
+    if ($n >= 1e6) return number_format($n / 1e6, 2) . 'M';
+    if ($n >= 1e3) return number_format($n / 1e3, 1) . 'K';
+    return number_format($n, 0);
+}
+
+// "3 months ago" หรือ "12 days ago" หรือ "recent"
+function relative_time(string $date, string $now_date): string {
+    $now    = strtotime($now_date);
+    $then   = strtotime($date);
+    $diff_d = (int)round(($now - $then) / 86400);
+    if ($diff_d < 7)  return t('just_now');
+    if ($diff_d < 60) return $diff_d . ' ' . t('days_ago');
+    $months = (int)round($diff_d / 30);
+    return $months . ' ' . t('months_ago');
+}
+
+$today = date('Y-m-d');
+$latest_relative = relative_time($latest_date, $today);
+
 require_once __DIR__ . '/includes/header.php';
 ?>
 
-<!-- ── Stat Cards ── -->
+<!-- ── Data Freeze Banner ── -->
+<div class="alert mb-3" style="background:linear-gradient(90deg,#fef3c7 0%,#fffbeb 100%);border:1px solid #fcd34d;color:#92400e;border-radius:10px;padding:10px 16px;display:flex;align-items:center;gap:10px;font-size:13px">
+  <i class="bi bi-info-circle-fill" style="font-size:16px"></i>
+  <div>
+    <strong><?= t('data_range') ?>:</strong> <?= fmt_date($latest_date) ?>
+    <span style="opacity:.7;margin-left:8px">(<?= $latest_relative ?>)</span>
+    <span style="margin-left:12px;font-size:11.5px;opacity:.8"><?= t('data_freeze_note') ?></span>
+  </div>
+</div>
+
+<!-- ── Stat Cards (Historical) ── -->
 <div class="row g-3 mb-4">
   <div class="col-sm-6 col-xl-3">
     <div class="card stat-card" style="--card-color:var(--accent)">
       <div class="card-body">
         <div class="d-flex align-items-start justify-content-between">
           <div>
-            <div class="stat-label"><?= t('po_this_month') ?></div>
-            <div class="stat-val"><?= number_format((int)$stats_month['cnt']) ?></div>
-            <div class="stat-label mt-1"><?= t('records') ?></div>
+            <div class="stat-label"><?= t('total_pos') ?></div>
+            <div class="stat-val"><?= number_format($total_pos) ?></div>
+            <div class="stat-label mt-1"><?= t('all_time') ?></div>
           </div>
           <i class="bi bi-file-text stat-icon"></i>
         </div>
@@ -86,9 +145,9 @@ require_once __DIR__ . '/includes/header.php';
       <div class="card-body">
         <div class="d-flex align-items-start justify-content-between">
           <div>
-            <div class="stat-label"><?= t('total_this_month') ?></div>
-            <div class="stat-val" style="font-size:22px"><?= fmt_number($stats_month['total'] ?? 0) ?></div>
-            <div class="stat-label mt-1"><?= t('baht') ?></div>
+            <div class="stat-label"><?= t('total_spending') ?></div>
+            <div class="stat-val" style="font-size:24px">฿<?= fmt_compact($total_spending) ?></div>
+            <div class="stat-label mt-1"><?= t('all_time') ?> · <?= number_format($total_spending, 0) ?> <?= t('baht') ?></div>
           </div>
           <i class="bi bi-currency-exchange stat-icon"></i>
         </div>
@@ -100,11 +159,9 @@ require_once __DIR__ . '/includes/header.php';
       <div class="card-body">
         <div class="d-flex align-items-start justify-content-between">
           <div>
-            <div class="stat-label"><?= t('due_in_7_days') ?></div>
-            <div class="stat-val" style="color:<?= $due_cnt > 0 ? 'var(--warning)' : 'var(--primary)' ?>">
-              <?= number_format($due_cnt) ?>
-            </div>
-            <div class="stat-label mt-1"><?= t('records') ?></div>
+            <div class="stat-label"><?= t('latest_po') ?></div>
+            <div class="stat-val" style="font-size:22px"><?= fmt_date($latest_date) ?></div>
+            <div class="stat-label mt-1"><?= $latest_relative ?></div>
           </div>
           <i class="bi bi-clock-history stat-icon"></i>
         </div>
@@ -112,13 +169,13 @@ require_once __DIR__ . '/includes/header.php';
     </div>
   </div>
   <div class="col-sm-6 col-xl-3">
-    <div class="card stat-card" style="--card-color:var(--muted)">
+    <div class="card stat-card" style="--card-color:var(--info)">
       <div class="card-body">
         <div class="d-flex align-items-start justify-content-between">
           <div>
-            <div class="stat-label"><?= t('total_vendors') ?></div>
-            <div class="stat-val"><?= number_format($vnd_cnt) ?></div>
-            <div class="stat-label mt-1"><?= $GLOBALS['LANG'] === 'th' ? 'ราย' : 'vendors' ?></div>
+            <div class="stat-label"><?= t('active_vendors') ?></div>
+            <div class="stat-val"><?= number_format($active_vendors) ?></div>
+            <div class="stat-label mt-1">/ <?= number_format($total_vendors) ?> <?= t('all_time') ?> · <?= t('last_12_months') ?></div>
           </div>
           <i class="bi bi-building stat-icon"></i>
         </div>
@@ -127,12 +184,12 @@ require_once __DIR__ . '/includes/header.php';
   </div>
 </div>
 
-<!-- ── Chart + Due Soon ── -->
+<!-- ── Chart + Top Locations ── -->
 <div class="row g-3 mb-4">
   <div class="col-xl-8">
     <div class="card h-100">
       <div class="card-header-inv d-flex align-items-center justify-content-between">
-        <span><i class="bi bi-bar-chart-line me-1"></i> <?= t('monthly_po_chart') ?></span>
+        <span><i class="bi bi-bar-chart-line me-1"></i> <?= t('monthly_chart_12m') ?></span>
         <span class="badge" style="background:rgba(255,255,255,.15);font-weight:500;font-size:11px" id="chartToggle">
           <i class="bi bi-arrow-repeat"></i> <?= t('count_vs_total') ?>
         </span>
@@ -142,47 +199,41 @@ require_once __DIR__ . '/includes/header.php';
       </div>
     </div>
   </div>
+
   <div class="col-xl-4">
     <div class="card h-100">
       <div class="card-header-inv">
-        <i class="bi bi-alarm me-1"></i> <?= t('due_in_7') ?>
-        <?php if ($due_cnt > 0): ?>
-          <span class="badge ms-1" style="background:var(--warning);color:#fff"><?= $due_cnt ?></span>
-        <?php endif; ?>
+        <i class="bi bi-geo-alt me-1"></i> <?= t('top_5_locations') ?>
       </div>
-      <div class="card-body p-0" style="overflow-y:auto;max-height:280px">
-        <?php if (!$r_due || mysqli_num_rows($r_due) === 0): ?>
-          <div class="text-center text-muted py-4" style="font-size:13px">
-            <i class="bi bi-check-circle" style="color:var(--success);font-size:24px"></i><br>
-            <?= t('no_due_po') ?>
+      <div class="card-body p-0">
+        <?php if (empty($top_locations)): ?>
+          <div class="text-center text-muted py-4"><?= t('no_data') ?></div>
+        <?php else:
+          $loc_max = max(array_column($top_locations, 'total')) ?: 1;
+        ?>
+          <div class="p-3">
+          <?php foreach ($top_locations as $i => $loc):
+            $pct = $loc_max > 0 ? ($loc['total'] / $loc_max * 100) : 0;
+            $colors = ['var(--accent)','var(--success)','var(--warning)','var(--info)','var(--primary-lt)'];
+            $color  = $colors[$i % count($colors)];
+          ?>
+            <div class="mb-3" style="cursor:pointer" onclick="location.href='/po_list.php?date_from=<?= $period_start ?>&date_to=<?= $period_end ?>&source=<?= urlencode($loc['LocaCode']) ?>'">
+              <div class="d-flex justify-content-between mb-1" style="font-size:12.5px">
+                <span class="fw-semibold"><?= htmlspecialchars($loc['LocaCode']) ?></span>
+                <span class="text-muted">฿<?= fmt_compact((float)$loc['total']) ?></span>
+              </div>
+              <div style="height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden">
+                <div style="height:100%;width:<?= round($pct, 1) ?>%;background:<?= $color ?>;border-radius:3px;transition:width .5s"></div>
+              </div>
+              <div style="font-size:10.5px;color:var(--muted);margin-top:3px"><?= number_format((int)$loc['po_cnt']) ?> PO</div>
+            </div>
+          <?php endforeach; ?>
           </div>
-        <?php else: ?>
-          <table class="table table-sm mb-0" style="font-size:12.5px">
-            <tbody>
-            <?php while ($d = mysqli_fetch_assoc($r_due)): ?>
-              <?php
-                $days_left = (int)round((strtotime($d['DeliveryDate']) - strtotime($today)) / 86400);
-              ?>
-              <tr onclick="location.href='/po_detail.php?seq=<?= (int)$d['SeqNo'] ?>'" style="cursor:pointer">
-                <td class="ps-3">
-                  <div class="fw-semibold"><?= htmlspecialchars($d['PoNo']) ?></div>
-                  <div class="text-muted" style="font-size:11px"><?= htmlspecialchars(db_str($d['VndName']) ?: $d['VndCode']) ?></div>
-                </td>
-                <td class="text-end pe-3">
-                  <div class="fw-semibold text-danger"><?= fmt_number($d['TAmt']) ?></div>
-                  <span class="badge-inv badge-due-soon" style="font-size:10px">
-                    <?= $days_left === 0 ? t('today_word') : ($days_left . ' ' . t('days')) ?>
-                  </span>
-                </td>
-              </tr>
-            <?php endwhile; ?>
-            </tbody>
-          </table>
         <?php endif; ?>
       </div>
-      <?php if ($due_cnt > 0): ?>
+      <?php if (!empty($top_locations)): ?>
       <div class="card-footer p-0" style="border-top:1px solid var(--border)">
-        <a href="/po_list.php?date_from=<?= $today ?>&date_to=<?= $due_soon_end ?>"
+        <a href="/dept_report.php?date_from=<?= $period_start ?>&date_to=<?= $period_end ?>"
            class="d-block text-center py-2" style="font-size:12px;color:var(--accent);text-decoration:none">
           <?= t('view_all') ?> <i class="bi bi-arrow-right"></i>
         </a>
@@ -197,10 +248,10 @@ require_once __DIR__ . '/includes/header.php';
   <div class="col-xl-4">
     <div class="card">
       <div class="card-header-inv">
-        <i class="bi bi-trophy me-1"></i> <?= t('top_5_vendors') ?>
+        <i class="bi bi-trophy me-1"></i> <?= t('top_5_vendors_12m') ?>
       </div>
       <div class="card-body p-0">
-        <?php if (!$r_top || mysqli_num_rows($r_top) === 0): ?>
+        <?php if (empty($top_vendors)): ?>
           <div class="text-center text-muted py-4"><?= t('no_data') ?></div>
         <?php else: ?>
         <table class="table-inv table mb-0">
@@ -213,7 +264,7 @@ require_once __DIR__ . '/includes/header.php';
             </tr>
           </thead>
           <tbody>
-          <?php $rank = 1; while ($v = mysqli_fetch_assoc($r_top)): ?>
+          <?php $rank = 1; foreach ($top_vendors as $v): ?>
             <tr onclick="location.href='/vendor_detail.php?vn_code=<?= urlencode($v['VndCode']) ?>'" style="cursor:pointer">
               <td class="text-center">
                 <?php if ($rank === 1): ?><i class="bi bi-trophy-fill" style="color:#f59e0b"></i>
@@ -227,9 +278,9 @@ require_once __DIR__ . '/includes/header.php';
                 <div style="font-size:10.5px;color:var(--muted)"><?= htmlspecialchars($v['VndCode']) ?></div>
               </td>
               <td class="text-end"><?= number_format((int)$v['cnt']) ?></td>
-              <td class="text-end fw-semibold"><?= fmt_number($v['total']) ?></td>
+              <td class="text-end fw-semibold">฿<?= fmt_compact((float)$v['total']) ?></td>
             </tr>
-          <?php $rank++; endwhile; ?>
+          <?php $rank++; endforeach; ?>
           </tbody>
         </table>
         <?php endif; ?>
@@ -255,35 +306,19 @@ require_once __DIR__ . '/includes/header.php';
                 <th><?= t('col_po_no') ?></th>
                 <th><?= t('col_vendor') ?></th>
                 <th class="text-end"><?= t('col_total') ?></th>
-                <th><?= t('col_due_date') ?></th>
                 <th><?= t('col_loc') ?></th>
               </tr>
             </thead>
             <tbody>
             <?php if (!$r_recent || mysqli_num_rows($r_recent) === 0): ?>
-              <tr><td colspan="6" class="text-center text-muted py-4"><?= t('no_data') ?></td></tr>
+              <tr><td colspan="5" class="text-center text-muted py-4"><?= t('no_data') ?></td></tr>
             <?php else: ?>
               <?php while ($po = mysqli_fetch_assoc($r_recent)): ?>
-              <?php
-                $is_overdue = $po['DeliveryDate'] && $po['DeliveryDate'] !== '0000-00-00' && $po['DeliveryDate'] < $today;
-                $is_due_soon = !$is_overdue && $po['DeliveryDate'] && $po['DeliveryDate'] !== '0000-00-00' && $po['DeliveryDate'] <= $due_soon_end;
-              ?>
               <tr onclick="location.href='/po_detail.php?seq=<?= (int)$po['SeqNo'] ?>'" style="cursor:pointer">
                 <td><?= fmt_date($po['PoDate']) ?></td>
                 <td><code style="font-size:11px"><?= htmlspecialchars($po['PoNo']) ?></code></td>
-                <td>
-                  <div style="font-size:12.5px"><?= htmlspecialchars(db_str($po['VndName']) ?: $po['VndCode']) ?></div>
-                </td>
-                <td class="text-end fw-semibold"><?= fmt_number($po['TAmt']) ?></td>
-                <td>
-                  <?php if ($is_overdue): ?>
-                    <span class="badge-inv badge-overdue"><?= fmt_date($po['DeliveryDate']) ?></span>
-                  <?php elseif ($is_due_soon): ?>
-                    <span class="badge-inv badge-due-soon"><?= fmt_date($po['DeliveryDate']) ?></span>
-                  <?php else: ?>
-                    <span style="font-size:12px"><?= fmt_date($po['DeliveryDate']) ?></span>
-                  <?php endif; ?>
-                </td>
+                <td><div style="font-size:12.5px"><?= htmlspecialchars(db_str($po['VndName']) ?: $po['VndCode']) ?></div></td>
+                <td class="text-end fw-semibold">฿<?= fmt_compact((float)$po['TAmt']) ?></td>
                 <td><span class="badge-inv badge-src"><?= htmlspecialchars($po['LocaCode']) ?></span></td>
               </tr>
               <?php endwhile; ?>
@@ -302,13 +337,13 @@ require_once __DIR__ . '/includes/header.php';
     var chartInstance = null;
     var LANG = <?= json_encode($GLOBALS['LANG']) ?>;
     var L = {
-      total:  LANG === 'th' ? 'ยอดรวม (บาท)' : 'Total (THB)',
-      count:  LANG === 'th' ? 'จำนวน PO'    : 'PO Count',
-      records:LANG === 'th' ? 'รายการ'       : 'records',
-      failed: LANG === 'th' ? 'โหลดกราฟไม่สำเร็จ' : 'Failed to load chart'
+      total:   LANG === 'th' ? 'ยอดรวม (บาท)' : 'Total (THB)',
+      count:   LANG === 'th' ? 'จำนวน PO'    : 'PO Count',
+      records: LANG === 'th' ? 'รายการ'      : 'records',
+      failed:  LANG === 'th' ? 'โหลดกราฟไม่สำเร็จ' : 'Failed to load chart'
     };
 
-    fetch('/chart-data.php?type=monthly')
+    fetch('/chart-data.php?type=monthly&anchor=<?= $latest_date ?>')
         .then(function(r) { return r.json(); })
         .then(function(rows) {
             var labels = rows.map(function(r) {

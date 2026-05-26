@@ -3,9 +3,10 @@
 // ดังนั้นต้อง SET NAMES latin1 (กัน MySQL แปลง) แล้วให้ PHP iconv แปลงเอง
 define('DB_CHARSET', 'latin1');
 
-// i18n + Auth — โหลดทุก request
+// i18n + Auth + Cache — โหลดทุก request
 require_once __DIR__ . '/lang.php';
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/cache.php';
 
 // บังคับ login ทุกหน้า (ยกเว้น login.php, logout.php จะ require เอง)
 require_login();

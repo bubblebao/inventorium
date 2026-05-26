@@ -169,6 +169,25 @@ $GLOBALS['TRANSLATIONS'] = [
     'col_proportion'    => ['th' => 'สัดส่วน',          'en' => 'Proportion'],
     'col_total_all'     => ['th' => 'รวมทั้งหมด',       'en' => 'Total'],
     'not_specified'     => ['th' => '(ไม่ระบุ)',         'en' => '(N/A)'],
+
+    // ── Historical Dashboard ──
+    'total_pos'         => ['th' => 'PO ทั้งหมด',        'en' => 'Total POs'],
+    'total_spending'    => ['th' => 'ยอดซื้อทั้งหมด',     'en' => 'Total Spending'],
+    'latest_po'         => ['th' => 'PO ล่าสุด',          'en' => 'Latest PO'],
+    'active_vendors'    => ['th' => 'Vendor ที่ใช้งาน',   'en' => 'Active Vendors'],
+    'all_time'          => ['th' => 'ตลอดกาล',           'en' => 'All Time'],
+    'last_12_months'    => ['th' => '12 เดือนล่าสุด',      'en' => 'Last 12 Months'],
+    'months_ago'        => ['th' => 'เดือนที่แล้ว',        'en' => 'months ago'],
+    'days_ago'          => ['th' => 'วันที่แล้ว',           'en' => 'days ago'],
+    'just_now'          => ['th' => 'ล่าสุด',             'en' => 'recent'],
+    'top_5_locations'   => ['th' => 'Top 5 Locations',   'en' => 'Top 5 Locations'],
+    'top_5_vendors_12m' => ['th' => 'Top 5 Vendor (12 เดือนล่าสุด)', 'en' => 'Top 5 Vendors (Last 12 Months)'],
+    'monthly_chart_12m' => ['th' => 'ยอด PO รายเดือน (12 เดือนล่าสุด)', 'en' => 'Monthly PO (Last 12 Months)'],
+    'data_range'        => ['th' => 'ข้อมูลถึง',           'en' => 'Data through'],
+    'data_freeze_note'  => ['th' => '⚠ ข้อมูลหยุดที่วันนี้ (อ่านอย่างเดียว)', 'en' => '⚠ Data frozen on this date (read-only)'],
+    'all_locations'     => ['th' => 'ทุก Location',       'en' => 'All Locations'],
+    'million_thb'       => ['th' => 'ล้านบาท',            'en' => 'Million THB'],
+    'billion_thb'       => ['th' => 'พันล้านบาท',         'en' => 'Billion THB'],
 ];
 
 function t(string $key): string {

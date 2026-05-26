@@ -2,16 +2,42 @@
 // ─── Authentication & Audit ───────────────────────────────────────────────
 require_once __DIR__ . '/users.php';
 
-// Start session ทุก request
-if (session_status() === PHP_SESSION_NONE) {
-    session_set_cookie_params(['lifetime' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax']);
-    session_start();
-}
-
-// Log directory (ถ้าไม่มีให้สร้าง)
+// Log directory (declare ก่อน session เพราะ timeout handler ใช้)
 $LOG_DIR = __DIR__ . '/../logs';
 if (!is_dir($LOG_DIR)) @mkdir($LOG_DIR, 0775, true);
 $LOG_FILE = $LOG_DIR . '/audit.log';
+
+// Session config — 8 ชั่วโมง idle timeout
+define('SESSION_TIMEOUT', 8 * 3600);
+
+if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.gc_maxlifetime', (string)SESSION_TIMEOUT);
+    session_set_cookie_params([
+        'lifetime' => SESSION_TIMEOUT,
+        'path'     => '/',
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+    session_start();
+
+    // Idle timeout — kick out ถ้าไม่มี activity > 8h
+    if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > SESSION_TIMEOUT)) {
+        if (isset($_SESSION['user'])) {
+            $u = $_SESSION['user']['username'] ?? '-';
+            $ip = $_SERVER['REMOTE_ADDR'] ?? '-';
+            @file_put_contents($LOG_FILE,
+                sprintf("%s | %-12s | %-15s | %-10s | %s\n",
+                    date('Y-m-d H:i:s'), $u, $ip, 'TIMEOUT', 'idle 8h'),
+                FILE_APPEND | LOCK_EX);
+        }
+        $_SESSION = [];
+        session_destroy();
+        setcookie(session_name(), '', time() - 3600, '/');
+        header('Location: /login.php?reason=timeout');
+        exit;
+    }
+    $_SESSION['last_activity'] = time();
+}
 
 // ─── Verify login ─────────────────────────────────────────────────────────
 function verify_login(string $username, string $password): ?array {
@@ -51,7 +77,6 @@ function current_user(): ?array {
 
 function require_login(): void {
     if (is_logged_in()) return;
-    // Save intended destination
     $_SESSION['redirect_to'] = $_SERVER['REQUEST_URI'] ?? '/';
     header('Location: /login.php');
     exit;
