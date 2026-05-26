@@ -1,0 +1,66 @@
+# Development environment — Docker Desktop on Windows
+# ใช้สำหรับ develop บนเครื่อง local ก่อน deploy ไป NAS
+#
+# Quick start:
+#   docker compose -f docker-compose.dev.yml up -d
+#
+# แก้โค้ด src/*.php → refresh browser เห็นผลทันที (ไม่ต้อง rebuild)
+#
+# Access:
+#   - Web:        http://localhost:8080
+#   - HeidiSQL:   localhost:3306, user=root, pass=inv123, db=backoffice
+
+services:
+
+  web:
+    build: .
+    container_name: inv-dev-web
+    ports:
+      - "8080:80"
+    environment:
+      DB_HOST: db-bridge
+      DB_PORT: 3306
+      DB_NAME: backoffice
+      DB_USER: root
+      DB_PASS: inv123
+      # ค่า PHP สำหรับ dev — แสดง error ทันที
+      PHP_DISPLAY_ERRORS: 1
+    volumes:
+      # Bind mount: edit src/ บน Windows → เห็นผลทันที
+      - ./src:/var/www/html
+      # Anonymous volume: เก็บ vendor/ จาก image (ป้องกัน bind mount บัง)
+      - /var/www/html/vendor
+    depends_on:
+      db-bridge:
+        condition: service_healthy
+    command: >
+      bash -c "echo 'display_errors=On' >> /usr/local/etc/php/conf.d/dev.ini &&
+               echo 'error_reporting=E_ALL & ~E_NOTICE & ~E_DEPRECATED' >> /usr/local/etc/php/conf.d/dev.ini &&
+               echo 'log_errors=On' >> /usr/local/etc/php/conf.d/dev.ini &&
+               apache2-foreground"
+    restart: unless-stopped
+
+  db-bridge:
+    image: mysql:5.5
+    container_name: inv-dev-db
+    ports:
+      - "3306:3306"  # เปิดให้ HeidiSQL ต่อจาก Windows ได้
+    environment:
+      MYSQL_ROOT_PASSWORD: inv123
+      MYSQL_DATABASE: backoffice
+      CARMEN_HOST: 192.168.1.12
+      CARMEN_USER: root
+    volumes:
+      - dev_carmen_cache:/var/lib/mysql
+      - ./db-init:/docker-entrypoint-initdb.d
+    command: --character-set-server=latin1 --collation-server=latin1_swedish_ci --local-infile=1 --secure-file-priv=""
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-u", "root", "-pinv123"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
+    restart: unless-stopped
+
+volumes:
+  dev_carmen_cache:

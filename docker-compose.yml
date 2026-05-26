@@ -1,0 +1,45 @@
+version: '3.8'
+services:
+
+  web:
+    build: .
+    ports:
+      - "8080:80"
+    environment:
+      DB_HOST: db-bridge
+      DB_PORT: 3306
+      DB_NAME: backoffice
+      DB_USER: root
+      DB_PASS: inv123
+    volumes:
+      # persist audit log + sessions ข้าม container rebuild
+      - inv_logs:/var/www/html/logs
+      - inv_sessions:/tmp/sessions
+    depends_on:
+      db-bridge:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db-bridge:
+    image: mysql:5.5
+    environment:
+      MYSQL_ROOT_PASSWORD: inv123
+      MYSQL_DATABASE: backoffice
+      CARMEN_HOST: 192.168.1.12
+      CARMEN_USER: root
+    volumes:
+      - carmen_cache:/var/lib/mysql
+      - ./db-init:/docker-entrypoint-initdb.d
+    command: --character-set-server=latin1 --collation-server=latin1_swedish_ci --local-infile=1 --secure-file-priv=""
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-u", "root", "-pinv123"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  carmen_cache:
+  inv_logs:
+  inv_sessions:

@@ -1,0 +1,37 @@
+# Dependencies
+vendor/
+node_modules/
+composer.lock
+
+# Runtime / Logs
+src/logs/
+*.log
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Local secrets (if any)
+.env
+.env.local
+
+# Docker volumes (data)
+data/
+*.sqlite
+
+# Build artifacts
+dist/
+build/
+*.tar.gz
+
+# Editor backups
+*~
+*.bak
+
+# OS specific
+$RECYCLE.BIN/
+desktop.ini

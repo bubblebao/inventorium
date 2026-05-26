@@ -1,0 +1,279 @@
+<?php
+$page_title   = $page_title   ?? 'Dashboard';
+$current_page = basename($_SERVER['PHP_SELF']);
+
+$nav_items = [
+    ['file' => 'index.php',        'icon' => 'bi-speedometer2',  'label' => t('dashboard')],
+    ['file' => 'po_list.php',      'icon' => 'bi-file-text',     'label' => t('po_list')],
+    ['file' => 'item_history.php', 'icon' => 'bi-box-seam',      'label' => t('item_search')],
+    ['file' => 'vendor_list.php',  'icon' => 'bi-building',      'label' => t('vendor')],
+    ['file' => 'dept_report.php',  'icon' => 'bi-bar-chart-line','label' => t('dept_report')],
+];
+
+$_user = current_user();
+$_is_admin = ($_user['role'] ?? '') === 'admin';
+
+// Build current URL for lang switcher (preserve query params)
+$current_qs = $_SERVER['QUERY_STRING'] ?? '';
+parse_str($current_qs, $qs_arr);
+$qs_arr['lang'] = $GLOBALS['LANG'] === 'th' ? 'en' : 'th';
+$lang_switch_url = '?' . http_build_query($qs_arr);
+$next_lang_label = $GLOBALS['LANG'] === 'th' ? 'EN' : 'TH';
+$next_lang_flag  = $GLOBALS['LANG'] === 'th' ? '🇺🇸' : '🇹🇭';
+?>
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title><?= htmlspecialchars($page_title) ?> — Inventorium</title>
+<link rel="icon" type="image/png" href="/assets/inventorium-logo.png">
+<link rel="apple-touch-icon" href="/assets/inventorium-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+/* ── Variables ── */
+:root{
+  --primary:#1e3a5f; --primary-lt:#2d5a8e;
+  --accent:#0ea5e9;  --gold:#f59e0b;
+  --bg:#f0f4f8; --surface:#fff; --surface-2:#f8fafc;
+  --border:#e2e8f0;
+  --success:#10b981; --warning:#f59e0b; --danger:#ef4444; --info:#0ea5e9;
+  --text:#1e293b; --muted:#64748b;
+  --sidebar-w:220px;
+}
+
+/* ── Reset ── */
+*{box-sizing:border-box}
+body{font-family:'Inter',system-ui,sans-serif;font-size:14px;color:var(--text);background:var(--bg);margin:0}
+
+/* ── Layout ── */
+.app-layout{display:flex;min-height:100vh}
+.sidebar{width:var(--sidebar-w);min-height:100vh;position:fixed;top:0;left:0;z-index:200;
+  background:linear-gradient(180deg,#1e3a5f 0%,#162d4a 100%);overflow-y:auto;transition:width .25s}
+.sidebar.collapsed{width:64px}
+.main-area{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s}
+.sidebar.collapsed ~ .main-area{margin-left:64px}
+
+/* ── Sidebar ── */
+.sidebar-brand{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.1);white-space:nowrap;overflow:hidden;display:flex;align-items:center;gap:10px;justify-content:center}
+.brand-logo{width:36px;height:36px;border-radius:8px;flex-shrink:0;object-fit:cover}
+.brand-text{font-size:18px;font-weight:800;letter-spacing:-.5px}
+.brand-text .inv{color:#fff}.brand-text .orium{color:var(--accent)}
+.sidebar.collapsed .sidebar-brand{padding:14px 8px}
+.sidebar.collapsed .brand-logo{width:40px;height:40px}
+.sidebar-divider{font-size:10px;font-weight:600;letter-spacing:1px;color:rgba(255,255,255,.35);
+  padding:16px 20px 6px;text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.sidebar.collapsed .sidebar-divider,.sidebar.collapsed .nav-label,.sidebar.collapsed .brand-text{display:none}
+.nav-item{display:flex;align-items:center;gap:12px;padding:10px 20px;color:rgba(255,255,255,.65);
+  text-decoration:none;font-size:13.5px;font-weight:500;transition:all .18s;
+  border-left:3px solid transparent;white-space:nowrap;overflow:hidden}
+.nav-item:hover{background:rgba(255,255,255,.1);color:#fff;border-left-color:rgba(255,255,255,.3)}
+.nav-item.active{background:rgba(255,255,255,.15);color:#fff;border-left-color:var(--accent)}
+.nav-item i{font-size:18px;width:20px;text-align:center;flex-shrink:0}
+.sidebar.collapsed .nav-item{padding:12px;justify-content:center;border-left:none;border-radius:0}
+.sidebar.collapsed .nav-item.active{border-left:none;border-right:3px solid var(--accent)}
+
+/* ── Top Header ── */
+.top-header{position:sticky;top:0;z-index:100;height:60px;background:#fff;
+  border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:16px}
+.sidebar-toggle{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;
+  padding:6px;border-radius:8px;transition:background .15s;flex-shrink:0}
+.sidebar-toggle:hover{background:var(--surface-2);color:var(--text)}
+.page-breadcrumb{font-size:15px;font-weight:600;color:var(--text);white-space:nowrap}
+.page-breadcrumb .bc-parent{color:var(--muted);font-weight:400}
+.header-search{position:relative;flex:1;max-width:380px}
+.header-search i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px}
+.header-search input{width:100%;border:1.5px solid var(--border);border-radius:24px;
+  padding:8px 16px 8px 36px;font-size:13.5px;background:var(--surface-2);transition:all .2s;font-family:inherit}
+.header-search input:focus{outline:none;border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px rgba(14,165,233,.1)}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.header-date{font-size:12px;color:var(--muted);white-space:nowrap}
+.db-status{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--success)}
+.db-status i{font-size:8px}
+.lang-switch{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;
+  border-radius:20px;background:var(--surface-2);color:var(--text);text-decoration:none;
+  font-size:12px;font-weight:600;border:1px solid var(--border);transition:all .15s}
+.lang-switch:hover{background:var(--accent);color:#fff;border-color:var(--accent);transform:translateY(-1px);
+  box-shadow:0 2px 6px rgba(14,165,233,.25)}
+.lang-flag{font-size:14px;line-height:1}
+.lang-label{letter-spacing:.3px}
+.user-menu{position:relative}
+.user-btn{display:inline-flex;align-items:center;gap:8px;padding:5px 12px 5px 6px;
+  border-radius:20px;background:var(--surface-2);color:var(--text);text-decoration:none;
+  font-size:12.5px;font-weight:600;border:1px solid var(--border);cursor:pointer;transition:all .15s}
+.user-btn:hover{background:var(--primary);color:#fff;border-color:var(--primary)}
+.user-avatar{width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;
+  display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+.user-dropdown{position:absolute;right:0;top:calc(100% + 6px);min-width:180px;
+  background:#fff;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);
+  border:1px solid var(--border);padding:6px;z-index:300;display:none}
+.user-menu.open .user-dropdown{display:block}
+.user-info{padding:10px 12px;border-bottom:1px solid var(--border);margin-bottom:4px}
+.user-info-name{font-size:13px;font-weight:600;color:var(--text)}
+.user-info-role{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.dropdown-item{display:flex;align-items:center;gap:10px;padding:8px 12px;
+  border-radius:6px;color:var(--text);text-decoration:none;font-size:13px;transition:background .12s}
+.dropdown-item:hover{background:var(--surface-2);color:var(--accent)}
+.dropdown-item.logout{color:var(--danger)}
+.dropdown-item.logout:hover{background:#fef2f2}
+
+/* ── Page Content ── */
+.page-content{flex:1;padding:24px}
+
+/* ── Cards ── */
+.card{border:none;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.07),0 1px 2px rgba(0,0,0,.05)}
+.card-header-inv{background:var(--primary);color:#fff;border-radius:12px 12px 0 0!important;padding:12px 20px;font-weight:600}
+
+/* ── Stat Cards ── */
+.stat-card{border-left:4px solid var(--card-color,var(--accent))!important}
+.stat-card .stat-val{font-size:28px;font-weight:700;color:var(--primary);line-height:1.1}
+.stat-card .stat-label{font-size:12px;color:var(--muted);font-weight:500}
+.stat-card .stat-icon{font-size:28px;opacity:.15;color:var(--card-color,var(--accent))}
+
+/* ── Tables ── */
+.table-inv{border-radius:0 0 12px 12px;overflow:hidden}
+.table-inv thead th{background:var(--primary);color:#fff;font-size:11.5px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.5px;padding:11px 16px;border:none;white-space:nowrap}
+.table-inv thead th.sortable{cursor:pointer;user-select:none}
+.table-inv thead th.sortable:hover{background:var(--primary-lt)}
+.table-inv thead th .sort-icon{margin-left:4px;opacity:.5;font-size:10px}
+.table-inv thead th.sort-active .sort-icon{opacity:1;color:var(--accent)}
+.table-inv tbody tr{border-bottom:1px solid var(--border);transition:background .12s}
+.table-inv tbody tr:hover{background:#e0f2fe;cursor:pointer}
+.table-inv tbody tr:nth-child(even){background:var(--surface-2)}
+.table-inv tbody tr:nth-child(even):hover{background:#e0f2fe}
+.table-inv tbody td{padding:11px 16px;vertical-align:middle}
+
+/* ── Badges ── */
+.badge-inv{border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;border:1px solid transparent}
+.badge-overdue {background:#fef2f2;color:#dc2626;border-color:#fca5a5}
+.badge-due-soon{background:#fffbeb;color:#d97706;border-color:#fcd34d}
+.badge-paid    {background:#f0fdf4;color:#16a34a;border-color:#86efac}
+.badge-normal  {background:#f0f9ff;color:#0369a1;border-color:#7dd3fc}
+.badge-src     {background:#f1f5f9;color:#475569;border-color:#cbd5e1}
+
+/* ── Date Shortcut Bar ── */
+.date-shortcuts{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.date-shortcuts .btn{border-radius:20px;font-size:12px;padding:3px 12px;font-weight:500}
+
+/* ── Buttons ── */
+.btn-inv-primary{background:var(--primary);color:#fff;border:none;border-radius:8px;font-weight:500}
+.btn-inv-primary:hover{background:var(--primary-lt);color:#fff}
+.btn-inv-outline{border:1.5px solid var(--border);background:#fff;color:var(--text);border-radius:8px;font-weight:500}
+.btn-inv-outline:hover{background:var(--surface-2)}
+
+/* ── Loading overlay ── */
+.loading-overlay{display:none;position:fixed;inset:0;background:rgba(255,255,255,.75);
+  z-index:9999;align-items:center;justify-content:center}
+.loading-overlay .spinner-border{width:3rem;height:3rem}
+
+/* ── Print ── */
+@media print{
+  .sidebar,.top-header,.no-print{display:none!important}
+  .main-area{margin-left:0!important}
+  .page-content{padding:0!important}
+  .card{box-shadow:none!important;border:1px solid #ddd!important}
+  .table-inv tbody tr:hover{background:transparent!important}
+  .btn{display:none!important}
+}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="text-center">
+    <div class="spinner-border text-primary"></div>
+    <div class="mt-2 fw-semibold" style="color:var(--primary)"><?= t('loading') ?></div>
+  </div>
+</div>
+
+<div class="app-layout">
+
+<!-- ── Sidebar ── -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <img src="/assets/inventorium-logo.png" alt="Inventorium" class="brand-logo">
+    <span class="brand-text"><span class="inv">Invent</span><span class="orium">orium</span></span>
+  </div>
+  <div class="sidebar-divider"><?= t('menu_main') ?></div>
+  <nav>
+    <?php foreach ($nav_items as $item): ?>
+    <a class="nav-item <?= $current_page === $item['file'] ? 'active' : '' ?>"
+       href="/<?= $item['file'] ?>" data-loading
+       title="<?= htmlspecialchars($item['label']) ?>">
+      <i class="bi <?= $item['icon'] ?>"></i>
+      <span class="nav-label"><?= htmlspecialchars($item['label']) ?></span>
+    </a>
+    <?php endforeach; ?>
+  </nav>
+</aside>
+
+<!-- ── Main Area ── -->
+<div class="main-area">
+
+<!-- Top Header -->
+<header class="top-header">
+  <button class="sidebar-toggle" id="sidebarToggle" title="ซ่อน/แสดง sidebar">
+    <i class="bi bi-list"></i>
+  </button>
+  <div class="page-breadcrumb">
+    <?php if ($current_page !== 'index.php'): ?>
+      <span class="bc-parent"><a href="/index.php" style="color:var(--muted);text-decoration:none"><?= t('dashboard') ?></a> /</span>
+    <?php endif; ?>
+    <?= htmlspecialchars($page_title) ?>
+  </div>
+
+  <form class="header-search" action="/po_list.php" method="GET" id="globalSearchForm">
+    <i class="bi bi-search"></i>
+    <input type="text" name="inv_no" id="globalSearch"
+           placeholder="ค้นหา PO... (หรือ V: ชื่อ vendor)"
+           autocomplete="off">
+  </form>
+
+  <div class="header-right">
+    <a href="<?= htmlspecialchars($lang_switch_url) ?>" class="lang-switch" title="Switch language">
+      <span class="lang-flag"><?= $next_lang_flag ?></span>
+      <span class="lang-label"><?= $next_lang_label ?></span>
+    </a>
+
+    <div class="user-menu" id="userMenu">
+      <button class="user-btn" type="button" onclick="document.getElementById('userMenu').classList.toggle('open')">
+        <span class="user-avatar"><?= strtoupper(substr($_user['username'] ?? '?', 0, 1)) ?></span>
+        <span><?= htmlspecialchars($_user['name'] ?? 'User') ?></span>
+        <i class="bi bi-chevron-down" style="font-size:10px"></i>
+      </button>
+      <div class="user-dropdown">
+        <div class="user-info">
+          <div class="user-info-name"><?= htmlspecialchars($_user['name'] ?? 'User') ?></div>
+          <div class="user-info-role"><?= htmlspecialchars($_user['role'] ?? '') ?> · @<?= htmlspecialchars($_user['username'] ?? '') ?></div>
+        </div>
+        <?php if ($_is_admin): ?>
+        <a href="/admin_log.php" class="dropdown-item">
+          <i class="bi bi-shield-check"></i> Audit Log
+        </a>
+        <?php endif; ?>
+        <a href="/logout.php" class="dropdown-item logout">
+          <i class="bi bi-box-arrow-right"></i> <?= $GLOBALS['LANG']==='th'?'ออกจากระบบ':'Sign Out' ?>
+        </a>
+      </div>
+    </div>
+
+    <span class="db-status"><i class="bi bi-circle-fill"></i> Backoffice</span>
+    <span class="header-date"><?= date('d/m/Y') ?></span>
+  </div>
+
+  <script>
+    // Close user dropdown on outside click
+    document.addEventListener('click', function(e) {
+      const menu = document.getElementById('userMenu');
+      if (menu && !menu.contains(e.target)) menu.classList.remove('open');
+    });
+  </script>
+</header>
+
+<!-- Page Content -->
+<main class="page-content">
