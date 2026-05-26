@@ -191,7 +191,8 @@ function sort_th(string $col, string $label, string $cur_sort, string $cur_dir, 
                         && $due <= date('Y-m-d', strtotime('+7 days'));
             $row_class = $is_overdue ? 'table-danger' : '';
           ?>
-          <tr class="<?= $row_class ?>">
+          <tr class="<?= $row_class ?>" style="cursor:pointer"
+              onclick="location.href='/po_detail.php?seq=<?= (int)$row['SeqNo'] ?>'">
             <td><?= fmt_date($row['PoDate']) ?></td>
             <td><code style="font-size:11px"><?= htmlspecialchars($row['PoNo']) ?></code></td>
             <td class="text-muted d-none d-xl-table-cell" style="font-size:11.5px"><?= htmlspecialchars($row['RefNo']) ?></td>

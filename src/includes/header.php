@@ -98,6 +98,25 @@ body.dark .table-striped tbody tr:nth-of-type(odd){background:rgba(255,255,255,.
 body.dark .table-hover tbody tr:hover{background:rgba(14,165,233,.15);color:var(--text)}
 body.dark thead th{color:#cbd5e1!important}
 
+/* Bootstrap table-danger/warning/success rows in dark mode */
+body.dark tr.table-danger,
+body.dark tr.table-danger td,
+body.dark tr.table-danger td *{
+  background-color:rgba(239,68,68,.12)!important;color:#fecaca!important}
+body.dark tr.table-danger:hover,
+body.dark tr.table-danger:hover td{background-color:rgba(239,68,68,.2)!important}
+body.dark tr.table-warning,
+body.dark tr.table-warning td,
+body.dark tr.table-warning td *{
+  background-color:rgba(245,158,11,.12)!important;color:#fde68a!important}
+body.dark tr.table-success,
+body.dark tr.table-success td,
+body.dark tr.table-success td *{
+  background-color:rgba(16,185,129,.12)!important;color:#a7f3d0!important}
+body.dark tr.table-danger code,
+body.dark tr.table-warning code,
+body.dark tr.table-success code{background:rgba(255,255,255,.1)!important}
+
 /* ── Bootstrap utility overrides ── */
 body.dark .text-muted{color:var(--muted)!important}
 body.dark .text-secondary{color:var(--muted)!important}
