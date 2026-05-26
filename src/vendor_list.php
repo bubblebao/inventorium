@@ -56,12 +56,12 @@ require_once __DIR__ . '/includes/header.php';
           <tr>
             <th><?= t('vendor_code') ?></th>
             <th><?= t('vendor_name') ?></th>
-            <th><?= t('vendor_payee') ?></th>
-            <th><?= t('vendor_phone') ?></th>
-            <th><?= t('vendor_taxno') ?></th>
+            <th class="d-none d-xl-table-cell"><?= t('vendor_payee') ?></th>
+            <th class="d-none d-lg-table-cell"><?= t('vendor_phone') ?></th>
+            <th class="d-none d-xl-table-cell"><?= t('vendor_taxno') ?></th>
             <th class="text-end"><?= t('vendor_balance') ?></th>
-            <th class="text-end"><?= t('vendor_credit') ?></th>
-            <th><?= t('vendor_last_close') ?></th>
+            <th class="text-end d-none d-md-table-cell"><?= t('vendor_credit') ?></th>
+            <th class="d-none d-xl-table-cell"><?= t('vendor_last_close') ?></th>
           </tr>
         </thead>
         <tbody>
@@ -72,15 +72,22 @@ require_once __DIR__ . '/includes/header.php';
           <tr style="cursor:pointer"
               onclick="location.href='<?= htmlspecialchars('/vendor_detail.php?vn_code=' . urlencode($v['VndCode'])) ?>'">
             <td><code><?= htmlspecialchars($v['VndCode']) ?></code></td>
-            <td class="fw-semibold"><?= htmlspecialchars(db_str($v['VndName'])) ?></td>
-            <td style="font-size:12px;color:var(--muted)"><?= htmlspecialchars(db_str($v['VndPayee'])) ?></td>
-            <td><?= htmlspecialchars($v['VndTel']) ?></td>
-            <td style="font-size:12px"><?= htmlspecialchars($v['VndTaxNo']) ?></td>
+            <td class="fw-semibold">
+              <div><?= htmlspecialchars(db_str($v['VndName'])) ?></div>
+              <!-- Show phone+payee on small screens inline (where columns hidden) -->
+              <div class="d-lg-none" style="font-size:11px;color:var(--muted);margin-top:2px">
+                <?php if ($v['VndTel']): ?><i class="bi bi-telephone" style="font-size:9px"></i> <?= htmlspecialchars($v['VndTel']) ?><?php endif; ?>
+                <?php if ($v['VndPayee']): ?> · <?= htmlspecialchars(db_str($v['VndPayee'])) ?><?php endif; ?>
+              </div>
+            </td>
+            <td class="d-none d-xl-table-cell" style="font-size:12px;color:var(--muted)"><?= htmlspecialchars(db_str($v['VndPayee'])) ?></td>
+            <td class="d-none d-lg-table-cell"><?= htmlspecialchars($v['VndTel']) ?></td>
+            <td class="d-none d-xl-table-cell" style="font-size:12px"><?= htmlspecialchars($v['VndTaxNo']) ?></td>
             <td class="text-end fw-semibold <?= (float)$v['VndCurBal'] > 0 ? 'text-danger' : '' ?>">
               <?= fmt_number($v['VndCurBal']) ?>
             </td>
-            <td class="text-end"><?= (int)$v['VndTerm'] ?></td>
-            <td style="font-size:12px;color:var(--muted)"><?= fmt_date($v['VndLastCls']) ?></td>
+            <td class="text-end d-none d-md-table-cell"><?= (int)$v['VndTerm'] ?></td>
+            <td class="d-none d-xl-table-cell" style="font-size:12px;color:var(--muted)"><?= fmt_date($v['VndLastCls']) ?></td>
           </tr>
           <?php endwhile; ?>
         <?php endif; ?>

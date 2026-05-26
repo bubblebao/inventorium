@@ -170,12 +170,12 @@ function sort_th(string $col, string $label, string $cur_sort, string $cur_dir, 
           <tr>
             <?= sort_th('PoDate',       t('col_date'),     $sort_key, $sort_dir, $base_params) ?>
             <th><?= t('col_po_no') ?></th>
-            <th><?= t('col_ref') ?></th>
+            <th class="d-none d-xl-table-cell"><?= t('col_ref') ?></th>
             <?= sort_th('VndName',       t('col_vendor'),    $sort_key, $sort_dir, $base_params) ?>
             <?= sort_th('TAmt',         t('col_total'),     $sort_key, $sort_dir, $base_params) ?>
             <?= sort_th('DeliveryDate', t('col_due_date'),  $sort_key, $sort_dir, $base_params) ?>
-            <th><?= t('col_loc') ?></th>
-            <th><?= t('recorded_by') ?></th>
+            <th class="d-none d-lg-table-cell"><?= t('col_loc') ?></th>
+            <th class="d-none d-xl-table-cell"><?= t('recorded_by') ?></th>
             <th></th>
           </tr>
         </thead>
@@ -194,10 +194,15 @@ function sort_th(string $col, string $label, string $cur_sort, string $cur_dir, 
           <tr class="<?= $row_class ?>">
             <td><?= fmt_date($row['PoDate']) ?></td>
             <td><code style="font-size:11px"><?= htmlspecialchars($row['PoNo']) ?></code></td>
-            <td class="text-muted" style="font-size:11.5px"><?= htmlspecialchars($row['RefNo']) ?></td>
+            <td class="text-muted d-none d-xl-table-cell" style="font-size:11.5px"><?= htmlspecialchars($row['RefNo']) ?></td>
             <td>
               <div><?= htmlspecialchars(db_str($row['VndName']) ?: $row['VndCode']) ?></div>
               <small style="color:var(--muted)"><?= htmlspecialchars($row['VndCode']) ?></small>
+              <!-- Show LOC + ผู้บันทึก inline ตอนซ่อนคอลัมน์ -->
+              <div class="d-lg-none" style="font-size:10.5px;color:var(--muted);margin-top:2px">
+                <span class="badge-inv badge-src" style="font-size:9px;padding:1px 6px"><?= htmlspecialchars($row['LocaCode']) ?></span>
+                <?php if (!empty($row['CreateUser'])): ?> · <?= htmlspecialchars(db_str($row['CreateUser'])) ?><?php endif; ?>
+              </div>
             </td>
             <td class="text-end fw-semibold"><?= fmt_number($row['TAmt']) ?></td>
             <td>
@@ -209,8 +214,8 @@ function sort_th(string $col, string $label, string $cur_sort, string $cur_dir, 
                 <span style="font-size:12px"><?= fmt_date($due) ?></span>
               <?php endif; ?>
             </td>
-            <td><span class="badge-inv badge-src"><?= htmlspecialchars($row['LocaCode']) ?></span></td>
-            <td style="font-size:11.5px;color:var(--muted)"><?= htmlspecialchars(db_str($row['CreateUser'])) ?></td>
+            <td class="d-none d-lg-table-cell"><span class="badge-inv badge-src"><?= htmlspecialchars($row['LocaCode']) ?></span></td>
+            <td class="d-none d-xl-table-cell" style="font-size:11.5px;color:var(--muted)"><?= htmlspecialchars(db_str($row['CreateUser'])) ?></td>
             <td>
               <a href="/po_detail.php?seq=<?= (int)$row['SeqNo'] ?>"
                  class="btn btn-sm" style="border:1px solid var(--accent);color:var(--accent);border-radius:6px"

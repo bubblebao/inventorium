@@ -17,10 +17,51 @@
   });
 })();
 
-// Sidebar collapse
-document.getElementById('sidebarToggle').addEventListener('click', function() {
-    document.getElementById('sidebar').classList.toggle('collapsed');
-});
+// Sidebar toggle — desktop: collapse, mobile: show/hide with backdrop
+(function() {
+    var sidebar  = document.getElementById('sidebar');
+    var toggle   = document.getElementById('sidebarToggle');
+    var backdrop = document.getElementById('sidebarBackdrop');
+    if (!sidebar || !toggle) return;
+
+    function isMobile() { return window.innerWidth <= 768; }
+
+    toggle.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (isMobile()) {
+            sidebar.classList.toggle('show');
+            if (backdrop) backdrop.classList.toggle('show');
+        } else {
+            sidebar.classList.toggle('collapsed');
+        }
+    });
+
+    // Click backdrop → close mobile sidebar
+    if (backdrop) {
+        backdrop.addEventListener('click', function() {
+            sidebar.classList.remove('show');
+            backdrop.classList.remove('show');
+        });
+    }
+
+    // Click nav-item on mobile → close sidebar after navigation
+    sidebar.querySelectorAll('.nav-item').forEach(function(item) {
+        item.addEventListener('click', function() {
+            if (isMobile()) {
+                sidebar.classList.remove('show');
+                if (backdrop) backdrop.classList.remove('show');
+            }
+        });
+    });
+
+    // Resize: clean state when crossing breakpoint
+    window.addEventListener('resize', function() {
+        if (!isMobile()) {
+            sidebar.classList.remove('show');
+            if (backdrop) backdrop.classList.remove('show');
+        }
+    });
+})();
 
 // Loading overlay on form submit or [data-loading] click
 document.querySelectorAll('form').forEach(function(f) {

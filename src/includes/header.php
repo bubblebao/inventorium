@@ -304,6 +304,105 @@ body{font-family:'Inter',system-ui,sans-serif;font-size:14px;color:var(--text);b
   .table-inv tbody tr:hover{background:transparent!important}
   .btn{display:none!important}
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE — 4 breakpoints
+   📱 Mobile  ≤768   → sidebar slide-in + 1-col cards
+   📱 Tablet  769-992 → sidebar collapsed (icon) + 2-col cards
+   💻 Laptop  993-1279 → sidebar full + 2-4 col cards
+   🖥️ Desktop ≥1280  → all full + max-width container
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Desktop ultra-wide: prevent stretched look ── */
+@media (min-width: 1600px){
+  .page-content{max-width:1600px;margin:0 auto;width:100%}
+}
+
+/* ── Laptop: cards always 4 cols ── */
+@media (min-width: 992px){
+  .row.g-3 > .col-sm-6.col-xl-3{flex:0 0 25%;max-width:25%}
+}
+
+/* ── Tablet (≤992px): sidebar collapsed by default + compact ── */
+@media (max-width: 992px){
+  .sidebar{width:64px}
+  .sidebar .sidebar-divider,.sidebar .nav-label,.sidebar .brand-text{display:none}
+  .main-area{margin-left:64px}
+  .stat-card .stat-val{font-size:22px}
+  .top-header{padding:0 12px;gap:8px}
+  .page-content{padding:16px}
+  .page-breadcrumb{font-size:13px}
+  .header-search{max-width:none}
+  .header-date{display:none}
+  .nav-item{padding:12px;justify-content:center;border-left:none}
+  .nav-item.active{border-left:none;border-right:3px solid var(--accent)}
+  /* Compact tables for tablet */
+  .table-inv thead th{padding:8px 10px;font-size:10.5px}
+  .table-inv tbody td{padding:8px 10px;font-size:12.5px}
+}
+
+/* ── Mobile (≤768px): sidebar HIDDEN by default, slide-in via toggle ── */
+@media (max-width: 768px){
+  .sidebar{
+    width:240px;transform:translateX(-100%);
+    transition:transform .25s ease-out;
+    box-shadow:none;
+  }
+  .sidebar .sidebar-divider,.sidebar .nav-label,.sidebar .brand-text{display:inline-block}
+  .sidebar .nav-item{padding:12px 20px;justify-content:flex-start;border-left:3px solid transparent}
+  .sidebar .nav-item.active{border-left-color:var(--accent);border-right:none}
+  .sidebar.show{transform:translateX(0);box-shadow:4px 0 24px rgba(0,0,0,.3)}
+  .main-area{margin-left:0!important}
+  .sidebar-backdrop{
+    display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
+    z-index:199;opacity:0;transition:opacity .25s
+  }
+  .sidebar-backdrop.show{display:block;opacity:1}
+
+  /* Top header: more compact */
+  .top-header{height:54px;padding:0 10px}
+  .header-search{display:none}  /* hide search bar on mobile */
+  .lang-switch .lang-label{display:none}  /* flag only */
+  .user-btn span:not(.user-avatar){display:none}  /* avatar only */
+  .db-status{display:none}
+
+  /* Cards: 1 column */
+  .row.g-3 > .col-sm-6,
+  .row.g-3 > .col-md-6,
+  .row.g-3 > .col-md-4{flex:0 0 100%;max-width:100%}
+
+  /* Stat cards smaller */
+  .stat-card .stat-val{font-size:24px}
+  .stat-card .stat-icon{font-size:24px}
+
+  /* Page content less padding */
+  .page-content{padding:12px}
+
+  /* Tables: allow horizontal scroll */
+  .table-responsive{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .card-header-inv{padding:10px 14px;font-size:13px}
+
+  /* Date shortcuts: smaller buttons */
+  .date-shortcuts .btn{padding:2px 8px;font-size:11px}
+
+  /* Filter form: full width fields */
+  .card-body .row.g-2 > [class*="col-"]{flex:0 0 100%;max-width:100%}
+
+  /* Item detail tables stack */
+  .table-inv thead th{padding:8px 10px;font-size:10.5px}
+  .table-inv tbody td{padding:8px 10px;font-size:12px}
+}
+
+/* ── Very small mobile (≤480px) ── */
+@media (max-width: 480px){
+  .top-header{padding:0 8px}
+  .page-content{padding:8px}
+  .stat-card .stat-val{font-size:20px}
+  .lang-switch{padding:4px 8px}
+}
+
+/* ── Sidebar backdrop (only visible on mobile when sidebar shown) ── */
+.sidebar-backdrop{display:none}
 </style>
 <script>
 // Apply theme BEFORE body renders → ไม่มี flash of light
@@ -314,6 +413,8 @@ body{font-family:'Inter',system-ui,sans-serif;font-size:14px;color:var(--text);b
 </script>
 </head>
 <body class="<?= $current_theme === 'dark' ? 'dark' : '' ?>">
+
+<div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
 <div class="loading-overlay" id="loadingOverlay">
   <div class="text-center">
