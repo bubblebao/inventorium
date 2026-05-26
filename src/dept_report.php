@@ -2,12 +2,36 @@
 require_once __DIR__ . '/config/db.php';
 $page_title = t('dept_report_title');
 
-$today     = date('Y-m-d');
-$date_from = $_GET['date_from'] ?? date('Y-m-01');
-$date_to   = $_GET['date_to']   ?? date('Y-m-t');
+// ─── Data Range: dynamic years จาก DB (data frozen — query 1 ครั้ง cache 24h) ──
+$range = cache_remember('po_year_range', 86400, function() use ($conn) {
+    $r = mysqli_query($conn, "
+        SELECT MIN(YEAR(PoDate)) AS y_min, MAX(YEAR(PoDate)) AS y_max
+        FROM invpo0
+        WHERE PoDate IS NOT NULL AND PoDate <> '0000-00-00' AND YEAR(PoDate) > 1990
+    ");
+    $row = $r ? mysqli_fetch_assoc($r) : null;
+    return [
+        'min' => (int)($row['y_min'] ?? 2020),
+        'max' => (int)($row['y_max'] ?? date('Y')),
+    ];
+});
+$year_min = $range['min'];
+$year_max = $range['max'];
 
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) $date_from = date('Y-m-01');
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_to))   $date_to   = date('Y-m-t');
+// ─── Default: latest year with data ─────────────────────────────────────────
+$today     = date('Y-m-d');
+$date_from = $_GET['date_from'] ?? "$year_max-01-01";
+$date_to   = $_GET['date_to']   ?? "$year_max-12-31";
+
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) $date_from = "$year_max-01-01";
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_to))   $date_to   = "$year_max-12-31";
+
+// Identify which year is currently active (for button highlight)
+$active_year = null;
+if (preg_match('/^(\d{4})-01-01$/', $date_from, $mf) && preg_match('/^(\d{4})-12-31$/', $date_to, $mt) && $mf[1] === $mt[1]) {
+    $active_year = (int)$mf[1];
+}
+$is_all_time = ($date_from === "$year_min-01-01" && $date_to === "$year_max-12-31");
 
 // invpo1 ไม่มี DeptCode — group by LocaCode (location/branch) จาก header แทน
 $result = mysqli_query($conn, "
@@ -35,13 +59,29 @@ if ($result) {
 require_once __DIR__ . '/includes/header.php';
 ?>
 
-<!-- Date Shortcut Bar -->
-<div class="date-shortcuts mb-2">
+<!-- Year Shortcut Bar -->
+<div class="date-shortcuts mb-2" style="align-items:center;flex-wrap:wrap;gap:6px">
   <span style="font-size:12px;color:var(--muted);line-height:2"><?= t('period') ?>:</span>
-  <button type="button" class="btn btn-sm btn-inv-outline" onclick="applyDatePreset('month')"><?= t('month') ?></button>
-  <button type="button" class="btn btn-sm btn-inv-outline" onclick="applyDatePreset('last_month')"><?= t('last_month') ?></button>
-  <button type="button" class="btn btn-sm btn-inv-outline" onclick="applyDatePreset('3months')"><?= t('three_months') ?></button>
-  <button type="button" class="btn btn-sm btn-inv-outline" onclick="applyDatePreset('year')"><?= t('year') ?></button>
+  <?php for ($y = $year_max; $y >= $year_min; $y--):
+    $is_active = ($active_year === $y);
+    $cls = $is_active ? 'btn-inv-primary' : 'btn-inv-outline';
+  ?>
+    <a href="?date_from=<?= $y ?>-01-01&date_to=<?= $y ?>-12-31"
+       class="btn btn-sm <?= $cls ?>"
+       data-loading
+       style="<?= $is_active ? 'box-shadow:0 0 0 2px rgba(14,165,233,.3)' : '' ?>">
+      <?php if ($y === $year_max): ?>
+        <i class="bi bi-star-fill" style="font-size:9px;color:#f59e0b"></i>
+      <?php endif; ?>
+      <?= $y ?>
+    </a>
+  <?php endfor; ?>
+  <a href="?date_from=<?= $year_min ?>-01-01&date_to=<?= $year_max ?>-12-31"
+     class="btn btn-sm <?= $is_all_time ? 'btn-inv-primary' : 'btn-inv-outline' ?>"
+     data-loading
+     style="<?= $is_all_time ? 'box-shadow:0 0 0 2px rgba(14,165,233,.3)' : '' ?>">
+    <i class="bi bi-infinity" style="font-size:11px"></i> All
+  </a>
 </div>
 
 <!-- Filter Card -->
