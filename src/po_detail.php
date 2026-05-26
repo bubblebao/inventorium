@@ -56,10 +56,24 @@ require_once __DIR__ . '/includes/header.php';
   </a>
   <script>
     (function(){
-      var last = sessionStorage.getItem('po_list_last_url');
-      if (last && last !== window.location.href) {
-        document.getElementById('backToPoList').href = last;
+      // po_detail_back_url = explicit back set by any source page (vendor_detail, item_history, po_list)
+      // fallback chain: po_detail_back_url → po_list_last_url → /po_list.php
+      var back = sessionStorage.getItem('po_detail_back_url')
+                 || sessionStorage.getItem('po_list_last_url');
+      var btn = document.getElementById('backToPoList');
+      if (back && back !== window.location.href) {
+        btn.href = back;
+        // Update label to match destination
+        if (back.indexOf('vendor_detail') !== -1) {
+          btn.querySelector('i').className = 'bi bi-building';
+          btn.childNodes[btn.childNodes.length - 1].textContent = ' Back to Vendor';
+        } else if (back.indexOf('item_history') !== -1) {
+          btn.querySelector('i').className = 'bi bi-box-seam';
+          btn.childNodes[btn.childNodes.length - 1].textContent = ' Back to Item';
+        }
       }
+      // Clear after use so next direct visit resets cleanly
+      sessionStorage.removeItem('po_detail_back_url');
     })();
   </script>
   <div class="d-flex gap-1">

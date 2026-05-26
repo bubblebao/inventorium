@@ -181,7 +181,7 @@ require_once __DIR__ . '/includes/header.php';
             $is_due_soon = $due && $due !== '0000-00-00' && !$is_overdue
                         && $due <= date('Y-m-d', strtotime('+7 days'));
           ?>
-          <tr onclick="location.href='/po_detail.php?seq=<?= (int)$po['SeqNo'] ?>'" style="cursor:pointer">
+          <tr onclick="sessionStorage.setItem('po_detail_back_url',window.location.href);location.href='/po_detail.php?seq=<?= (int)$po['SeqNo'] ?>'" style="cursor:pointer">
             <td><?= fmt_date($po['PoDate']) ?></td>
             <td><code style="font-size:11px"><?= htmlspecialchars($po['PoNo']) ?></code></td>
             <td style="font-size:11.5px;color:var(--muted)"><?= htmlspecialchars($po['RefNo']) ?></td>

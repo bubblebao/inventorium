@@ -388,7 +388,7 @@ if ($prd_id !== '') {
                 $p = (float)$h['Price'];
                 $price_cls = $avg > 0 ? ($p < $avg * 0.95 ? 'text-success' : ($p > $avg * 1.05 ? 'text-danger' : '')) : '';
               ?>
-              <tr onclick="location.href='/po_detail.php?seq=<?= (int)$h['SeqNo'] ?>'" style="cursor:pointer">
+              <tr onclick="sessionStorage.setItem('po_detail_back_url',window.location.href);location.href='/po_detail.php?seq=<?= (int)$h['SeqNo'] ?>'" style="cursor:pointer">
                 <td><?= fmt_date($h['PoDate']) ?></td>
                 <td><code style="font-size:11px"><?= htmlspecialchars($h['PoNo']) ?></code></td>
                 <td><?= htmlspecialchars(db_str($h['VndName']) ?: $h['VndCode']) ?></td>

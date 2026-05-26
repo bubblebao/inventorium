@@ -229,7 +229,7 @@ function sort_th(string $col, string $label, string $cur_sort, string $cur_dir, 
                         && $due <= date('Y-m-d', strtotime('+7 days'));
           ?>
           <tr style="cursor:pointer"
-              onclick="location.href='/po_detail.php?seq=<?= (int)$row['SeqNo'] ?>'">
+              onclick="sessionStorage.setItem('po_detail_back_url',window.location.href);location.href='/po_detail.php?seq=<?= (int)$row['SeqNo'] ?>'">
             <td><?= fmt_date($row['PoDate']) ?></td>
             <td><code style="font-size:11px"><?= htmlspecialchars($row['PoNo']) ?></code></td>
             <td class="text-muted d-none d-xl-table-cell" style="font-size:11.5px"><?= htmlspecialchars($row['RefNo']) ?></td>
