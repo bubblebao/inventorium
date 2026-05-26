@@ -198,7 +198,7 @@ require_once __DIR__ . '/includes/header.php';
             $sum_amt += (float)$item['Amount'];
         ?>
           <tr style="cursor:pointer"
-              onclick="location.href='/item_history.php?prd_id=<?= urlencode($item['PrdID']) ?>'"
+              onclick="sessionStorage.setItem('item_detail_back_url',window.location.href);location.href='/item_history.php?prd_id=<?= urlencode($item['PrdID']) ?>'"
               title="ดูประวัติการซื้อสินค้านี้">
             <td><?= htmlspecialchars($item['DtlNo']) ?></td>
             <td>

@@ -128,11 +128,20 @@ if ($prd_id !== '') {
       </a>
     </div>
     <script>
-      // ดึง URL ค้นหาล่าสุดมาใช้เป็นปุ่ม back (UX: รักษาประวัติการค้น)
       (function() {
-        var last = sessionStorage.getItem('item_last_search');
-        if (last && last !== window.location.href) {
-          document.getElementById('backToSearch').href = last;
+        var btn  = document.getElementById('backToSearch');
+        var lbl  = document.getElementById('backLabel');
+        // Priority: came from po_detail → item_detail_back_url
+        var fromPo   = sessionStorage.getItem('item_detail_back_url');
+        var fromSearch = sessionStorage.getItem('item_last_search');
+
+        if (fromPo && fromPo !== window.location.href) {
+          btn.href = fromPo;
+          if (lbl) lbl.textContent = ' Back to PO';
+          btn.querySelector('i').className = 'bi bi-file-text';
+          sessionStorage.removeItem('item_detail_back_url');
+        } else if (fromSearch && fromSearch !== window.location.href) {
+          btn.href = fromSearch;
         }
       })();
     </script>
