@@ -25,8 +25,7 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: inv123
       MYSQL_DATABASE: backoffice
-      CARMEN_HOST: 192.168.1.12
-      CARMEN_USER: root
+      # Carmen connection removed — data is self-contained in snapshot.sql.gz
     volumes:
       - carmen_cache:/var/lib/mysql
       - ./db-init:/docker-entrypoint-initdb.d

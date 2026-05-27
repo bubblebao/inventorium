@@ -28,6 +28,11 @@ dist/
 build/
 *.tar.gz
 
+# DB snapshot (keep .sql.gz but not raw .sql — too large)
+db-init/*.sql
+!db-init/*.sql.gz
+db-init/*.bak
+
 # Editor backups
 *~
 *.bak
