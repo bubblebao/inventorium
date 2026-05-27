@@ -98,7 +98,10 @@ require_once __DIR__ . '/includes/header.php';
             <td>
               <?php
                 $addr_lines = array_filter(array_map(
-                    function($f) use ($vnd) { return trim(db_str($vnd[$f] ?? '')); },
+                    function($f) use ($vnd) {
+                        $v = trim(db_str($vnd[$f] ?? ''));
+                        return (strcasecmp($v, 'NULL') === 0 || $v === '') ? '' : $v;
+                    },
                     ['VndAdd1','VndAdd2','VndAdd3','VndAdd4']
                 ));
               ?>
@@ -111,9 +114,16 @@ require_once __DIR__ . '/includes/header.php';
               <?php endif; ?>
             </td>
           </tr>
-          <tr><th style="color:var(--muted)"><?= t('vendor_phone') ?></th><td><?= htmlspecialchars($vnd['VndTel'] ?? '') ?></td></tr>
-          <tr><th style="color:var(--muted)"><?= t('vendor_email') ?></th><td><?= htmlspecialchars($vnd['VndEmail'] ?? '') ?></td></tr>
-          <tr><th style="color:var(--muted)"><?= t('vendor_taxno') ?></th><td><?= htmlspecialchars($vnd['VndTaxNo'] ?? '') ?></td></tr>
+          <?php
+            // Helper: แสดง field หรือ — ถ้าว่าง/NULL
+            $vf = function($f) use ($vnd) {
+                $v = trim(db_str($vnd[$f] ?? ''));
+                return (strcasecmp($v,'NULL')===0||$v==='') ? '<span style="color:var(--muted)">—</span>' : htmlspecialchars($v);
+            };
+          ?>
+          <tr><th style="color:var(--muted)"><?= t('vendor_phone') ?></th><td><?= $vf('VndTel') ?></td></tr>
+          <tr><th style="color:var(--muted)"><?= t('vendor_email') ?></th><td><?= $vf('VndEmail') ?></td></tr>
+          <tr><th style="color:var(--muted)"><?= t('vendor_taxno') ?></th><td><?= $vf('VndTaxNo') ?></td></tr>
         </table>
       </div>
       <div class="col-md-6">
@@ -125,8 +135,8 @@ require_once __DIR__ . '/includes/header.php';
               <?= fmt_number($vnd['VndCurBal'] ?? 0) ?> <?= t('baht') ?>
             </td>
           </tr>
-          <tr><th style="color:var(--muted)"><?= t('category') ?></th><td><?= htmlspecialchars($vnd['VndCatCode'] ?? '') ?></td></tr>
-          <tr><th style="color:var(--muted)"><?= t('vendor_mobile') ?></th><td><?= htmlspecialchars($vnd['VndMobile'] ?? '') ?></td></tr>
+          <tr><th style="color:var(--muted)"><?= t('category') ?></th><td><?= $vf('VndCatCode') ?></td></tr>
+          <tr><th style="color:var(--muted)"><?= t('vendor_mobile') ?></th><td><?= $vf('VndMobile') ?></td></tr>
           <tr><th style="color:var(--muted)"><?= t('vendor_last_close') ?></th><td><?= fmt_date($vnd['VndLastCls'] ?? '') ?></td></tr>
         </table>
       </div>

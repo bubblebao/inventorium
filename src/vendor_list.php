@@ -83,8 +83,9 @@ require_once __DIR__ . '/includes/header.php';
             </td>
             <td class="d-none d-xl-table-cell" style="font-size:12px;color:var(--muted)">
               <?php
-                $a1 = trim(db_str($v['VndAdd1'] ?? ''));
-                $a2 = trim(db_str($v['VndAdd2'] ?? ''));
+                $clean = function($s) { $v = trim(db_str($s ?? '')); return strcasecmp($v,'NULL')===0 ? '' : $v; };
+                $a1 = $clean($v['VndAdd1'] ?? '');
+                $a2 = $clean($v['VndAdd2'] ?? '');
               ?>
               <?php if ($a1 || $a2): ?>
                 <?php if ($a1): ?><div><?= htmlspecialchars($a1) ?></div><?php endif; ?>
