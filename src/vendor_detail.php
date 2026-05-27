@@ -94,7 +94,23 @@ require_once __DIR__ . '/includes/header.php';
         <table class="table table-sm table-borderless mb-0" style="font-size:13px">
           <tr><th style="width:140px;color:var(--muted)"><?= t('vendor_code') ?></th><td><code><?= htmlspecialchars($vnd['VndCode']) ?></code></td></tr>
           <tr><th style="color:var(--muted)"><?= t('vendor_name') ?></th><td class="fw-semibold"><?= htmlspecialchars(db_str($vnd['VndName'])) ?></td></tr>
-          <tr><th style="color:var(--muted)"><?= t('vendor_payee') ?></th><td><?= htmlspecialchars(db_str($vnd['VndPayee'] ?? '')) ?></td></tr>
+          <tr><th style="color:var(--muted);vertical-align:top"><?= t('vendor_address') ?></th>
+            <td>
+              <?php
+                $addr_lines = array_filter(array_map(
+                    function($f) use ($vnd) { return trim(db_str($vnd[$f] ?? '')); },
+                    ['VndAdd1','VndAdd2','VndAdd3','VndAdd4']
+                ));
+              ?>
+              <?php if ($addr_lines): ?>
+                <?php foreach ($addr_lines as $line): ?>
+                  <div><?= htmlspecialchars($line) ?></div>
+                <?php endforeach; ?>
+              <?php else: ?>
+                <span style="color:var(--muted)">—</span>
+              <?php endif; ?>
+            </td>
+          </tr>
           <tr><th style="color:var(--muted)"><?= t('vendor_phone') ?></th><td><?= htmlspecialchars($vnd['VndTel'] ?? '') ?></td></tr>
           <tr><th style="color:var(--muted)"><?= t('vendor_email') ?></th><td><?= htmlspecialchars($vnd['VndEmail'] ?? '') ?></td></tr>
           <tr><th style="color:var(--muted)"><?= t('vendor_taxno') ?></th><td><?= htmlspecialchars($vnd['VndTaxNo'] ?? '') ?></td></tr>

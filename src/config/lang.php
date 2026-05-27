@@ -134,6 +134,7 @@ $GLOBALS['TRANSLATIONS'] = [
     'vendor_search'     => ['th' => 'ค้นหา Vendor',     'en' => 'Search Vendor'],
     'vendor_search_ph'  => ['th' => 'ชื่อ หรือ รหัส Vendor...', 'en' => 'Name or Vendor Code...'],
     'vendor_payee'      => ['th' => 'ผู้รับเงิน',        'en' => 'Payee'],
+    'vendor_address'    => ['th' => 'ที่อยู่',            'en' => 'Address'],
     'vendor_phone'      => ['th' => 'โทรศัพท์',         'en' => 'Phone'],
     'vendor_mobile'     => ['th' => 'มือถือ',           'en' => 'Mobile'],
     'vendor_email'      => ['th' => 'Email',            'en' => 'Email'],

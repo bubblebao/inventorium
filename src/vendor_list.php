@@ -7,12 +7,12 @@ $search = $_GET['search'] ?? '';
 $where = '';
 if ($search !== '') {
     $s_ascii = db_escape($search);   // VndCode, VndTel, VndTaxNo
-    $s_tis   = db_search($search);   // VndName, VndPayee (TIS-620)
-    $where = "WHERE VndName LIKE '%$s_tis%' OR VndCode LIKE '%$s_ascii%' OR VndPayee LIKE '%$s_tis%' OR VndTel LIKE '%$s_ascii%' OR VndTaxNo LIKE '%$s_ascii%'";
+    $s_tis   = db_search($search);   // VndName, VndAdd1 (TIS-620)
+    $where = "WHERE VndName LIKE '%$s_tis%' OR VndCode LIKE '%$s_ascii%' OR VndAdd1 LIKE '%$s_tis%' OR VndTel LIKE '%$s_ascii%' OR VndTaxNo LIKE '%$s_ascii%'";
 }
 
 $result = mysqli_query($conn, "
-    SELECT VndCode, VndName, VndPayee, VndTel, VndTaxNo, VndCurBal, VndTerm,
+    SELECT VndCode, VndName, VndAdd1, VndAdd2, VndTel, VndTaxNo, VndCurBal, VndTerm,
            VndLastCls
     FROM gblvend
     $where
@@ -57,7 +57,7 @@ require_once __DIR__ . '/includes/header.php';
           <tr>
             <th data-sort="text"><?= t('vendor_code') ?></th>
             <th data-sort="text"><?= t('vendor_name') ?></th>
-            <th data-sort="text" class="d-none d-xl-table-cell"><?= t('vendor_payee') ?></th>
+            <th data-sort="text" class="d-none d-xl-table-cell"><?= t('vendor_address') ?></th>
             <th data-sort="text" class="d-none d-lg-table-cell"><?= t('vendor_phone') ?></th>
             <th data-sort="text" class="d-none d-xl-table-cell"><?= t('vendor_taxno') ?></th>
             <th data-sort="num" class="text-end"><?= t('vendor_balance') ?></th>
@@ -75,13 +75,24 @@ require_once __DIR__ . '/includes/header.php';
             <td><code><?= htmlspecialchars($v['VndCode']) ?></code></td>
             <td class="fw-semibold">
               <div><?= htmlspecialchars(db_str($v['VndName'])) ?></div>
-              <!-- Show phone+payee on small screens inline (where columns hidden) -->
+              <!-- Show phone+address on small screens inline (where columns hidden) -->
               <div class="d-lg-none" style="font-size:11px;color:var(--muted);margin-top:2px">
                 <?php if ($v['VndTel']): ?><i class="bi bi-telephone" style="font-size:9px"></i> <?= htmlspecialchars($v['VndTel']) ?><?php endif; ?>
-                <?php if ($v['VndPayee']): ?> · <?= htmlspecialchars(db_str($v['VndPayee'])) ?><?php endif; ?>
+                <?php $addr1 = trim(db_str($v['VndAdd1'] ?? '')); if ($addr1): ?> · <?= htmlspecialchars($addr1) ?><?php endif; ?>
               </div>
             </td>
-            <td class="d-none d-xl-table-cell" style="font-size:12px;color:var(--muted)"><?= htmlspecialchars(db_str($v['VndPayee'])) ?></td>
+            <td class="d-none d-xl-table-cell" style="font-size:12px;color:var(--muted)">
+              <?php
+                $a1 = trim(db_str($v['VndAdd1'] ?? ''));
+                $a2 = trim(db_str($v['VndAdd2'] ?? ''));
+              ?>
+              <?php if ($a1 || $a2): ?>
+                <?php if ($a1): ?><div><?= htmlspecialchars($a1) ?></div><?php endif; ?>
+                <?php if ($a2): ?><div style="font-size:11px;opacity:.8"><?= htmlspecialchars($a2) ?></div><?php endif; ?>
+              <?php else: ?>
+                <span style="opacity:.4">—</span>
+              <?php endif; ?>
+            </td>
             <td class="d-none d-lg-table-cell"><?= htmlspecialchars($v['VndTel']) ?></td>
             <td class="d-none d-xl-table-cell" style="font-size:12px"><?= htmlspecialchars($v['VndTaxNo']) ?></td>
             <td class="text-end fw-semibold <?= (float)$v['VndCurBal'] > 0 ? 'text-danger' : '' ?>">
