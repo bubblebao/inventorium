@@ -12,7 +12,7 @@ require_once __DIR__ . '/cache.php';
 require_login();
 
 $conn = null;
-$db_host = getenv('DB_HOST') ?: '192.168.1.12';
+$db_host = getenv('DB_HOST') ?: 'db-bridge';
 $db_user = getenv('DB_USER') ?: 'root';
 $db_pass = getenv('DB_PASS') ?: '';
 $db_name = getenv('DB_NAME') ?: 'Carmen';
