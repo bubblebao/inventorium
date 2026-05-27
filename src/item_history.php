@@ -10,10 +10,10 @@ if ($prd_id !== '') {
 
     // Item master — เอาทุก field ที่มี (SELECT *)
     $r_item = mysqli_query($conn, "SELECT * FROM gblprod WHERE PrdId = '$prd_id_safe' LIMIT 1");
-    $item = $r_item ? mysqli_fetch_assoc($r_item) : null;
+    $prod = $r_item ? mysqli_fetch_assoc($r_item) : null;
 
     // Fallback: ถ้าไม่มีใน gblprod ลองหาจาก invpo1 (มี PO history)
-    if (!$item) {
+    if (!$prod) {
         $r_check = mysqli_query($conn, "SELECT COUNT(*) AS c FROM invpo1 WHERE PrdID = '$prd_id_safe'");
         $row = $r_check ? mysqli_fetch_assoc($r_check) : null;
         if (!$row || (int)$row['c'] === 0) {
@@ -21,14 +21,16 @@ if ($prd_id !== '') {
             exit;
         }
         // ไม่มี master record แต่มี PO history — สร้าง placeholder
-        $item = ['PrdId' => $prd_id];
+        $prod = ['PrdId' => $prd_id];
     }
 
     // Pull fallback data from invpo1 — get first non-empty for each field
     $latest_remark = ''; $latest_unit = ''; $latest_vendor = ''; $latest_po_date = '';
     $latest_price = 0.0; $latest_vendor_code = '';
+
+    // Latest PO context (unit / price / date / vendor) — most recent row
     $r_fb = mysqli_query($conn, "
-        SELECT d.Remark, d.Unit, d.Price, h.PoDate, h.VndCode, v.VndName
+        SELECT d.Unit, d.Price, h.PoDate, h.VndCode, v.VndName
         FROM invpo1 d
         INNER JOIN invpo0 h ON h.SeqNo = d.SeqNo
         LEFT JOIN gblvend v ON v.VndCode = h.VndCode
@@ -38,7 +40,6 @@ if ($prd_id !== '') {
     ");
     if ($r_fb) {
         while ($fb = mysqli_fetch_assoc($r_fb)) {
-            if ($latest_remark === '' && trim($fb['Remark'] ?? '') !== '') $latest_remark = db_str($fb['Remark']);
             if ($latest_unit   === '' && trim($fb['Unit']   ?? '') !== '') $latest_unit   = $fb['Unit'];
             if ($latest_po_date === '' && !empty($fb['PoDate']) && $fb['PoDate'] !== '0000-00-00') {
                 $latest_po_date = $fb['PoDate'];
@@ -46,7 +47,35 @@ if ($prd_id !== '') {
                 $latest_vendor_code = $fb['VndCode'] ?? '';
             }
             if ($latest_vendor === '' && trim($fb['VndName'] ?? '') !== '') $latest_vendor = db_str($fb['VndName']);
-            if ($latest_remark && $latest_unit && $latest_po_date && $latest_vendor) break;
+            if ($latest_unit && $latest_po_date && $latest_vendor) break;
+        }
+    }
+
+    // Description fallback — search ALL PO history, prefer most recent row with non-empty Remark
+    $r_remark = mysqli_query($conn, "
+        SELECT d.Remark, p.PrdDescT, p.PrdDescE
+        FROM invpo1 d
+        LEFT JOIN gblprod p ON p.PrdId = d.PrdID
+        INNER JOIN invpo0 h ON h.SeqNo = d.SeqNo
+        WHERE d.PrdID = '$prd_id_safe'
+        ORDER BY
+            IF(d.Remark IS NULL OR TRIM(d.Remark) = '' OR d.Remark = 'NULL', 1, 0) ASC,
+            h.PoDate DESC, h.SeqNo DESC
+        LIMIT 1
+    ");
+    if ($r_remark && ($rm = mysqli_fetch_assoc($r_remark))) {
+        $remark_raw = trim($rm['Remark'] ?? '');
+        if ($remark_raw !== '' && strcasecmp($remark_raw, 'NULL') !== 0) {
+            $latest_remark = db_str($remark_raw);
+        }
+        // Also patch item master if gblprod returned empty but JOIN found values
+        if ((empty($prod['PrdDescE']) || strcasecmp(trim($prod['PrdDescE'] ?? ''), 'NULL') === 0)
+            && !empty($rm['PrdDescE'])) {
+            $prod['PrdDescE'] = $rm['PrdDescE'];
+        }
+        if ((empty($prod['PrdDescT']) || strcasecmp(trim($prod['PrdDescT'] ?? ''), 'NULL') === 0)
+            && !empty($rm['PrdDescT'])) {
+            $prod['PrdDescT'] = $rm['PrdDescT'];
         }
     }
 
@@ -72,7 +101,7 @@ if ($prd_id !== '') {
         return $v;
     };
 
-    $page_title = ($GLOBALS['LANG']==='th'?'สินค้า: ':'Item: ') . htmlspecialchars($item['PrdId'] ?? $prd_id);
+    $page_title = ($GLOBALS['LANG']==='th'?'สินค้า: ':'Item: ') . htmlspecialchars($prod['PrdId'] ?? $prd_id);
 
     // Stats
     $r_stat = mysqli_query($conn, "
@@ -150,9 +179,9 @@ if ($prd_id !== '') {
     <div class="card mb-3">
       <div class="card-header-inv">
         <i class="bi bi-box-seam me-1"></i>
-        <code style="color:#fff;background:rgba(255,255,255,.15);padding:2px 8px;border-radius:4px"><?= htmlspecialchars($item['PrdId'] ?? $prd_id) ?></code>
-        <span class="ms-2"><?= htmlspecialchars(db_str(($item['PrdDescT'] ?? '') ?: ($item['PrdDescE'] ?? ''))) ?></span>
-        <?php if ((int)($item['Active'] ?? 1) === 0): ?>
+        <code style="color:#fff;background:rgba(255,255,255,.15);padding:2px 8px;border-radius:4px"><?= htmlspecialchars($prod['PrdId'] ?? $prd_id) ?></code>
+        <span class="ms-2"><?= htmlspecialchars(db_str(($prod['PrdDescT'] ?? '') ?: ($prod['PrdDescE'] ?? ''))) ?></span>
+        <?php if ((int)($prod['Active'] ?? 1) === 0): ?>
           <span class="badge ms-1" style="background:var(--danger)">Inactive</span>
         <?php endif; ?>
       </div>
@@ -161,16 +190,16 @@ if ($prd_id !== '') {
           <div class="col-md-6">
             <table class="table table-sm table-borderless mb-0" style="font-size:13px">
               <?php
-                $eng     = $val(db_str($item['PrdDescE'] ?? ''), '');
-                $thai    = $val(db_str($item['PrdDescT'] ?? ''), '');
-                $barcode = $val($item['Barcode'] ?? '', '');
-                $bunit   = $val($item['BaseUnit'] ?? '', $latest_unit ?: '—');
-                $catCode = trim($item['CateCode'] ?? '');
-                $subCode = trim($item['SubCatCode'] ?? '');
+                $eng     = $val(db_str($prod['PrdDescE'] ?? ''), '');
+                $thai    = $val(db_str($prod['PrdDescT'] ?? ''), '');
+                $barcode = $val($prod['Barcode'] ?? '', '');
+                $bunit   = $val($prod['BaseUnit'] ?? '', $latest_unit ?: '—');
+                $catCode = trim($prod['CateCode'] ?? '');
+                $subCode = trim($prod['SubCatCode'] ?? '');
 
                 // Fallback: parse category from PrdId prefix (e.g. "AS02-0001" → "AS02")
                 if ($catCode === '') {
-                    if (preg_match('/^([A-Za-z]+\d*)/', (string)($item['PrdId'] ?? $prd_id), $mm)) {
+                    if (preg_match('/^([A-Za-z]+\d*)/', (string)($prod['PrdId'] ?? $prd_id), $mm)) {
                         $catCode = $mm[1];
                         $cat_from_code = true;
                     }
@@ -220,11 +249,11 @@ if ($prd_id !== '') {
           <div class="col-md-6">
             <table class="table table-sm table-borderless mb-0" style="font-size:13px">
               <?php
-                $defVendor = trim($item['VndCode'] ?? '');
-                $defPrice  = (float)($item['DefaultPrice'] ?? 0);
-                $lastCost  = (float)($item['LastCost'] ?? 0);
-                $onHand    = (float)($item['OnHand'] ?? 0);
-                $lastUpd   = $item['LastUpdate'] ?? '';
+                $defVendor = trim($prod['VndCode'] ?? '');
+                $defPrice  = (float)($prod['DefaultPrice'] ?? 0);
+                $lastCost  = (float)($prod['LastCost'] ?? 0);
+                $onHand    = (float)($prod['OnHand'] ?? 0);
+                $lastUpd   = $prod['LastUpdate'] ?? '';
                 $avgPrice  = (float)($stat['avg_price'] ?? 0);
 
                 // Fallback chain (จาก master → จาก PO data)
@@ -302,7 +331,7 @@ if ($prd_id !== '') {
           <div class="card-body">
             <div class="stat-label"><?= t('total_qty') ?></div>
             <div class="stat-val"><?= number_format((float)$stat['total_qty'], 0) ?></div>
-            <div class="stat-label mt-1"><?= htmlspecialchars($item['BaseUnit'] ?? '') ?></div>
+            <div class="stat-label mt-1"><?= htmlspecialchars($prod['BaseUnit'] ?? '') ?></div>
           </div>
         </div>
       </div>
@@ -419,7 +448,7 @@ if ($prd_id !== '') {
     </div>
 
     <script>
-      if (window.Inv) Inv.trackView('item', <?= json_encode($item['PrdId'] ?? $prd_id) ?>, <?= json_encode(db_str($item['PrdDescE'] ?? $item['PrdDescT'] ?? '') ?: ($item['PrdId'] ?? $prd_id)) ?>);
+      if (window.Inv) Inv.trackView('item', <?= json_encode($prod['PrdId'] ?? $prd_id) ?>, <?= json_encode(db_str($prod['PrdDescE'] ?? $prod['PrdDescT'] ?? '') ?: ($prod['PrdId'] ?? $prd_id)) ?>);
     </script>
     <?php require_once __DIR__ . '/includes/footer.php'; ?>
     <?php
