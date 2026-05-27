@@ -50,7 +50,8 @@ $rows = [];
 $grand_total = 0;
 if ($result) {
     while ($r = mysqli_fetch_assoc($result)) {
-        $r['DeptCode'] = db_str($r['DeptCode']); // TIS-620 → UTF-8
+        $r['DeptCode_raw'] = $r['DeptCode'];            // Keep original bytes for URL (ASCII LocaCode = safe)
+        $r['DeptCode'] = db_str($r['DeptCode']);        // TIS-620 → UTF-8 for display
         $rows[] = $r;
         $grand_total += (float)$r['total_abt'];
     }
@@ -128,8 +129,20 @@ require_once __DIR__ . '/includes/header.php';
       <div class="card-header-inv d-flex align-items-center justify-content-between">
         <span><i class="bi bi-bar-chart-line me-1"></i> <?= t('dept_report_by') ?>
           <?= htmlspecialchars(fmt_date($date_from)) ?> — <?= htmlspecialchars(fmt_date($date_to)) ?>
+          <span style="font-size:11px;opacity:.75;margin-left:8px"><?= t('subtotal') ?>: <?= fmt_number($grand_total) ?> <?= t('baht') ?></span>
         </span>
-        <span style="font-size:12px;opacity:.8"><?= t('subtotal') ?>: <?= fmt_number($grand_total) ?> <?= t('baht') ?></span>
+        <div class="d-flex gap-1">
+          <a href="/export.php?type=dept_report&date_from=<?= urlencode($date_from) ?>&date_to=<?= urlencode($date_to) ?>&format=excel"
+             class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)" target="_blank"
+             title="<?= t('export_report') ?> (Excel)">
+            <i class="bi bi-file-earmark-excel me-1"></i> Excel
+          </a>
+          <a href="/export.php?type=dept_report&date_from=<?= urlencode($date_from) ?>&date_to=<?= urlencode($date_to) ?>&format=pdf"
+             class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)" target="_blank"
+             title="<?= t('export_report') ?> (PDF)">
+            <i class="bi bi-file-earmark-pdf me-1"></i> PDF
+          </a>
+        </div>
       </div>
       <div class="card-body p-0">
         <table class="table-inv table mb-0">
@@ -148,11 +161,13 @@ require_once __DIR__ . '/includes/header.php';
           <?php foreach ($rows as $i => $r):
             $pct = $grand_total > 0 ? round((float)$r['total_abt'] / $grand_total * 100, 1) : 0;
             $bar_w = min(100, $pct);
+            $drill_url = '/po_list.php?source=' . urlencode($r['DeptCode_raw']) . '&date_from=' . $date_from . '&date_to=' . $date_to;
           ?>
-            <tr>
+            <tr onclick="location.href='<?= htmlspecialchars($drill_url) ?>'" style="cursor:pointer" title="<?= t('view_pos_for_loc') ?>">
               <td class="text-center" style="color:var(--muted)"><?= $i + 1 ?></td>
               <td class="fw-semibold">
                 <?= htmlspecialchars($r['DeptCode'] ?: t('not_specified')) ?>
+                <i class="bi bi-arrow-right-short" style="color:var(--accent);font-size:13px;opacity:.7"></i>
               </td>
               <td class="text-end"><?= number_format((int)$r['po_cnt']) ?></td>
               <td class="text-end fw-semibold"><?= fmt_number($r['total_abt']) ?></td>

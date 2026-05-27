@@ -14,12 +14,13 @@ define('COMPANY_TEL',     '0-7631-7600');
 define('COMPANY_TAX_ID',  '0835546002941');
 
 $format = $_GET['format'] ?? 'excel'; // excel | pdf
-$type   = $_GET['type']   ?? 'po_list'; // po_list | po_detail | vendor
+$type   = $_GET['type']   ?? 'po_list'; // po_list | po_detail | vendor | dept_report
 
 switch ($type) {
-    case 'po_detail': exportPoDetail($format); break;
-    case 'vendor':    exportVendor($format);   break;
-    default:          exportPoList($format);   break;
+    case 'po_detail':   exportPoDetail($format);   break;
+    case 'vendor':      exportVendor($format);      break;
+    case 'dept_report': exportDeptReport($format);  break;
+    default:            exportPoList($format);      break;
 }
 
 // ─── PO List Export ─────────────────────────────────────────────────────────
@@ -438,16 +439,25 @@ function exportVendor(string $format): void
 {
     global $conn;
     $result = mysqli_query($conn, "
-        SELECT VndCode, VndName, VndPayee, VndTel, VndEmail, VndTaxNo, VndCurBal, VndTerm, VndMobile, VndCatCode
+        SELECT VndCode, VndName, VndAdd1, VndAdd2, VndAdd3, VndAdd4,
+               VndTel, VndEmail, VndTaxNo, VndCurBal, VndTerm, VndMobile, VndCatCode
         FROM gblvend ORDER BY VndName
     ");
     $rows = [];
     while ($r = mysqli_fetch_assoc($result)) $rows[] = $r;
 
+    // Filter out literal "NULL" strings from address fields
+    $clean = function(?string $v): string {
+        $v = trim(db_str($v ?? ''));
+        return (strcasecmp($v, 'NULL') === 0 || $v === '') ? '' : $v;
+    };
+
     $title   = 'รายชื่อ Vendor — ' . fmt_date(date('Y-m-d'));
-    $headers = ['รหัส','ชื่อ Vendor','ผู้รับเงิน','โทรศัพท์','Email','Tax No','ยอดค้าง','เครดิต(วัน)','มือถือ','หมวด'];
+    $headers = ['รหัส','ชื่อ Vendor','ที่อยู่ 1','ที่อยู่ 2','ที่อยู่ 3','ที่อยู่ 4','โทรศัพท์','Email','Tax No','ยอดค้าง','เครดิต(วัน)','มือถือ','หมวด'];
     $data = array_map(fn($r) => [
-        $r['VndCode'], db_str($r['VndName']), db_str($r['VndPayee']),
+        $r['VndCode'], db_str($r['VndName']),
+        $clean($r['VndAdd1']), $clean($r['VndAdd2']),
+        $clean($r['VndAdd3']), $clean($r['VndAdd4']),
         $r['VndTel'], $r['VndEmail'], $r['VndTaxNo'],
         (float)$r['VndCurBal'], (int)$r['VndTerm'],
         $r['VndMobile'], $r['VndCatCode'],
@@ -457,6 +467,54 @@ function exportVendor(string $format): void
         outputPdf($title, $headers, $data, 'A4-L');
     } else {
         outputExcel($title, $headers, $data, 'vendor_' . date('Ymd'));
+    }
+}
+
+// ─── Dept Report Export ─────────────────────────────────────────────────────
+function exportDeptReport(string $format): void
+{
+    global $conn;
+    $date_from = $_GET['date_from'] ?? date('Y-01-01');
+    $date_to   = $_GET['date_to']   ?? date('Y-12-31');
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) $date_from = date('Y-01-01');
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_to))   $date_to   = date('Y-12-31');
+
+    $result = mysqli_query($conn, "
+        SELECT h.LocaCode AS DeptCode,
+               COUNT(DISTINCT h.SeqNo) AS po_cnt,
+               SUM(d.NetAmount)        AS total_abt,
+               SUM(d.TaxAmt)           AS total_tax
+        FROM invpo0 h
+        LEFT JOIN invpo1 d ON d.SeqNo = h.SeqNo
+        WHERE h.PoDate BETWEEN '" . db_escape($date_from) . "' AND '" . db_escape($date_to) . "'
+        GROUP BY h.LocaCode
+        ORDER BY total_abt DESC
+    ");
+    $rows = [];
+    $grand = 0;
+    while ($r = mysqli_fetch_assoc($result)) {
+        $r['DeptCode'] = db_str($r['DeptCode']);
+        $rows[] = $r;
+        $grand += (float)$r['total_abt'];
+    }
+
+    $title   = 'รายงานตาม Location — ' . fmt_date($date_from) . ' ถึง ' . fmt_date($date_to);
+    $headers = ['Location', 'จำนวน PO', 'ยอดก่อนภาษี (บาท)', 'VAT (บาท)', '% ของรวม'];
+    $data = array_map(function($r) use ($grand) {
+        $pct = $grand > 0 ? round((float)$r['total_abt'] / $grand * 100, 2) : 0;
+        return [
+            $r['DeptCode'] ?: '(ไม่ระบุ)',
+            (int)$r['po_cnt'],
+            (float)$r['total_abt'],
+            (float)$r['total_tax'],
+            $pct,
+        ];
+    }, $rows);
+
+    if ($format === 'pdf') {
+        outputPdf($title, $headers, $data, 'A4');
+    } else {
+        outputExcel($title, $headers, $data, 'dept_report_' . date('Ymd'));
     }
 }
 

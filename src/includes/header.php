@@ -524,6 +524,9 @@ body{font-family:'Inter',system-ui,sans-serif;font-size:14px;color:var(--text);b
         <a href="/admin_log.php" class="dropdown-item">
           <i class="bi bi-shield-check"></i> Audit Log
         </a>
+        <a href="/admin_snapshot.php" class="dropdown-item">
+          <i class="bi bi-database-down"></i> <?= t('snapshot_nav') ?>
+        </a>
         <?php endif; ?>
         <a href="/logout.php" class="dropdown-item logout">
           <i class="bi bi-box-arrow-right"></i> <?= $GLOBALS['LANG']==='th'?'ออกจากระบบ':'Sign Out' ?>

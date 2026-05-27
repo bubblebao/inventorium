@@ -189,6 +189,25 @@ $GLOBALS['TRANSLATIONS'] = [
     'all_locations'     => ['th' => 'ทุก Location',       'en' => 'All Locations'],
     'million_thb'       => ['th' => 'ล้านบาท',            'en' => 'Million THB'],
     'billion_thb'       => ['th' => 'พันล้านบาท',         'en' => 'Billion THB'],
+
+    // ── Feature 2: Dept Report drill-down ──
+    'view_pos_for_loc'  => ['th' => 'ดู PO ของ Location นี้', 'en' => 'View POs for this location'],
+    'export_report'     => ['th' => 'Export รายงาน',      'en' => 'Export Report'],
+
+    // ── Feature 3: Yearly Chart ──
+    'yearly_chart'      => ['th' => 'ยอดซื้อรายปี (ทุกปี)', 'en' => 'Yearly Spending (All Years)'],
+    'click_to_drill'    => ['th' => 'คลิกแท่งเพื่อดูรายละเอียดปีนั้น', 'en' => 'Click bar to view year detail'],
+
+    // ── Feature 5: Admin Snapshot ──
+    'snapshot_title'    => ['th' => 'สร้าง DB Snapshot ใหม่', 'en' => 'Generate DB Snapshot'],
+    'snapshot_btn'      => ['th' => 'ดาวน์โหลด Snapshot ใหม่', 'en' => 'Download New Snapshot'],
+    'snapshot_running'  => ['th' => 'กำลังสร้าง... โปรดรอ', 'en' => 'Generating... Please wait'],
+    'snapshot_done'     => ['th' => 'เสร็จแล้ว! กำลังดาวน์โหลด', 'en' => 'Done! Downloading'],
+    'snapshot_warning'  => ['th' => '⚠ อาจใช้เวลา 1–3 นาที (ข้อมูลเกือบล้านแถว)', 'en' => '⚠ May take 1–3 minutes (nearly 1M rows)'],
+    'snapshot_note'     => ['th' => 'วิธีใช้งาน: นำไฟล์ที่ได้ไปเปลี่ยนที่ db-init/snapshot.sql.gz แล้ว push ขึ้น git', 'en' => 'Usage: Replace db-init/snapshot.sql.gz with downloaded file, then push to git'],
+    'snapshot_tables'   => ['th' => 'ตารางที่ dump: invpo0, invpo1, gblvend, gblprod', 'en' => 'Tables: invpo0, invpo1, gblvend, gblprod'],
+    'snapshot_nav'      => ['th' => 'Re-Snapshot DB',     'en' => 'Re-Snapshot DB'],
+    'snapshot_stats'    => ['th' => 'สถิติข้อมูลปัจจุบัน', 'en' => 'Current Data Stats'],
 ];
 
 function t(string $key): string {

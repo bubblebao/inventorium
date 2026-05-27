@@ -331,6 +331,27 @@ require_once __DIR__ . '/includes/header.php';
   </div>
 </div>
 
+<!-- ── Yearly Spending Chart ── -->
+<div class="row g-3 mt-1 mb-2">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header-inv d-flex align-items-center justify-content-between">
+        <span><i class="bi bi-graph-up-arrow me-1"></i> <?= t('yearly_chart') ?></span>
+        <span class="d-flex align-items-center gap-2">
+          <span style="font-size:11px;opacity:.75"><i class="bi bi-hand-index-thumb me-1"></i><?= t('click_to_drill') ?></span>
+          <span class="badge" style="background:rgba(255,255,255,.15);cursor:pointer;font-size:11px" id="yearlyToggle">
+            <i class="bi bi-arrow-repeat"></i> <?= t('count_vs_total') ?>
+          </span>
+        </span>
+      </div>
+      <div class="card-body" style="padding:16px">
+        <canvas id="yearlyChart" height="55"></canvas>
+        <p id="yearlyChartErr" class="text-muted text-center" style="font-size:12px;display:none"><?= $GLOBALS['LANG']==='th'?'โหลดกราฟไม่สำเร็จ':'Failed to load chart' ?></p>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 (function() {
     var showTotal = true;
@@ -413,6 +434,110 @@ require_once __DIR__ . '/includes/header.php';
             document.getElementById('monthlyChart').insertAdjacentHTML(
                 'afterend', '<p class="text-muted text-center" style="font-size:12px">' + L.failed + '</p>'
             );
+        });
+})();
+
+// ── Yearly Spending Chart ────────────────────────────────────────────────
+(function() {
+    var showTotal = true;
+    var yChart = null;
+    var LANG = <?= json_encode($GLOBALS['LANG']) ?>;
+    var L = {
+        total:   LANG === 'th' ? 'ยอดรวม (บาท)' : 'Total (THB)',
+        count:   LANG === 'th' ? 'จำนวน PO'    : 'PO Count',
+        records: LANG === 'th' ? 'รายการ'       : 'records'
+    };
+
+    fetch('/chart-data.php?type=yearly')
+        .then(function(r) { return r.json(); })
+        .then(function(rows) {
+            if (!rows || rows.length === 0) {
+                document.getElementById('yearlyChartErr').style.display = '';
+                return;
+            }
+            var labels    = rows.map(function(r) { return String(r.year); });
+            var cntData   = rows.map(function(r) { return r.cnt; });
+            var totalData = rows.map(function(r) { return r.total; });
+
+            // Highlight peak year in gold, rest in blue
+            function makeColors(data) {
+                var mx = Math.max.apply(null, data);
+                return data.map(function(v) {
+                    return v === mx ? 'rgba(245,158,11,0.85)' : 'rgba(14,165,233,0.65)';
+                });
+            }
+
+            var ctx = document.getElementById('yearlyChart').getContext('2d');
+            yChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: L.total,
+                        data: totalData,
+                        backgroundColor: makeColors(totalData),
+                        borderColor: makeColors(totalData).map(function(c) {
+                            return c.replace('0.85','1').replace('0.65','1');
+                        }),
+                        borderWidth: 1,
+                        borderRadius: 5,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    var v = ctx.raw;
+                                    return showTotal
+                                        ? ' ฿' + v.toLocaleString('th-TH', {minimumFractionDigits:2})
+                                        : ' ' + v + ' ' + L.records;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(v) {
+                                    if (!showTotal) return v;
+                                    if (v >= 1e9) return (v/1e9).toFixed(1)+'B';
+                                    if (v >= 1e6) return (v/1e6).toFixed(1)+'M';
+                                    if (v >= 1e3) return (v/1e3).toFixed(0)+'K';
+                                    return v;
+                                }
+                            }
+                        }
+                    },
+                    // Click bar → drill down to dept_report for that year
+                    onClick: function(evt, elements) {
+                        if (elements.length > 0) {
+                            var yr = labels[elements[0].index];
+                            location.href = '/dept_report.php?date_from=' + yr + '-01-01&date_to=' + yr + '-12-31';
+                        }
+                    }
+                }
+            });
+
+            // Toggle count/total
+            var toggle = document.getElementById('yearlyToggle');
+            if (toggle) toggle.addEventListener('click', function() {
+                showTotal = !showTotal;
+                var d = showTotal ? totalData : cntData;
+                yChart.data.datasets[0].label = showTotal ? L.total : L.count;
+                yChart.data.datasets[0].data  = d;
+                yChart.data.datasets[0].backgroundColor = makeColors(d);
+                yChart.data.datasets[0].borderColor = makeColors(d).map(function(c) {
+                    return c.replace('0.85','1').replace('0.65','1');
+                });
+                yChart.update();
+            });
+        })
+        .catch(function() {
+            document.getElementById('yearlyChartErr').style.display = '';
         });
 })();
 </script>

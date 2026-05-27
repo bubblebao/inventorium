@@ -64,6 +64,29 @@ if ($type === 'monthly') {
         ];
     }
     echo json_encode($rows);
+} elseif ($type === 'yearly') {
+    // Year-over-Year: total spending + PO count per calendar year
+    $result = mysqli_query($conn, "
+        SELECT YEAR(h.PoDate) AS yr,
+               COUNT(DISTINCT h.SeqNo) AS cnt,
+               SUM(d.Amount)           AS total
+        FROM invpo0 h
+        LEFT JOIN invpo1 d ON d.SeqNo = h.SeqNo
+        WHERE h.PoDate IS NOT NULL
+          AND h.PoDate <> '0000-00-00'
+          AND YEAR(h.PoDate) > 1990
+        GROUP BY YEAR(h.PoDate)
+        ORDER BY yr ASC
+    ");
+    $rows = [];
+    while ($r = mysqli_fetch_assoc($result)) {
+        $rows[] = [
+            'year'  => (int)$r['yr'],
+            'cnt'   => (int)$r['cnt'],
+            'total' => (float)$r['total'],
+        ];
+    }
+    echo json_encode($rows);
 } else {
     echo json_encode([]);
 }
