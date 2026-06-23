@@ -5,6 +5,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
 $nav_items = [
     ['file' => 'index.php',        'icon' => 'bi-speedometer2',  'label' => t('dashboard')],
     ['file' => 'po_list.php',      'icon' => 'bi-file-text',     'label' => t('po_list')],
+    ['file' => 'recv_list.php',    'icon' => 'bi-box-arrow-in-down', 'label' => t('recv_nav')],
     ['file' => 'item_history.php', 'icon' => 'bi-box-seam',      'label' => t('item_search')],
     ['file' => 'vendor_list.php',  'icon' => 'bi-building',      'label' => t('vendor')],
     ['file' => 'dept_report.php',  'icon' => 'bi-bar-chart-line','label' => t('dept_report')],

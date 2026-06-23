@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/recv_filter.php';
 require_once __DIR__ . '/vendor/autoload.php';
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -20,6 +21,8 @@ switch ($type) {
     case 'po_detail':   exportPoDetail($format);   break;
     case 'vendor':      exportVendor($format);      break;
     case 'dept_report': exportDeptReport($format);  break;
+    case 'recv_list':   exportRecvList($format);    break;
+    case 'recv_detail': exportRecvDetail($format);  break;
     default:            exportPoList($format);      break;
 }
 
@@ -516,6 +519,313 @@ function exportDeptReport(string $format): void
     } else {
         outputExcel($title, $headers, $data, 'dept_report_' . date('Ymd'));
     }
+}
+
+// ─── Receiving List Export ──────────────────────────────────────────────────
+function exportRecvList(string $format): void
+{
+    global $conn;
+
+    $year = (int)date('Y');
+    $p     = recv_collect_params("$year-01-01", "$year-12-31");
+    $where = recv_where_from_params($p);
+    $date_from = $p['date_from'];
+    $date_to   = $p['date_to'];
+
+    $result = mysqli_query($conn, "
+        SELECT h.RecvDate, h.RecvNo, h.RefNo, h.PoNo, h.VndCode, v.VndName,
+               h.InvType, h.LocaCode, h.CreateUser, h.Remark,
+               (SELECT SUM(Amount) FROM invrecv1 WHERE SeqNo = h.SeqNo) AS TAmt
+        FROM invrecv0 h
+        LEFT JOIN gblvend v ON h.VndCode = v.VndCode
+        WHERE $where
+        ORDER BY h.RecvDate DESC, h.SeqNo DESC
+    ");
+
+    $rows = [];
+    while ($r = mysqli_fetch_assoc($result)) $rows[] = $r;
+
+    $typeLabel = fn($t) => $t === 'I' ? 'Inventory' : ($t === 'D' ? 'Direct' : (string)$t);
+
+    $title   = 'Receiving List ' . fmt_date($date_from) . ' - ' . fmt_date($date_to);
+    $headers = ['วันที่รับ','เลขที่รับ','PO No','Ref','รหัส Vendor','ชื่อ Vendor','ประเภท','Location','ยอดรวม','ผู้บันทึก','หมายเหตุ'];
+    $data = array_map(fn($r) => [
+        fmt_date($r['RecvDate']),
+        $r['RecvNo'],
+        $r['PoNo'],
+        $r['RefNo'],
+        $r['VndCode'],
+        db_str($r['VndName']),
+        $typeLabel($r['InvType']),
+        $r['LocaCode'],
+        (float)$r['TAmt'],
+        db_str($r['CreateUser']),
+        db_str($r['Remark']),
+    ], $rows);
+
+    if ($format === 'pdf') {
+        outputPdf($title, $headers, $data, 'A4-L');
+    } else {
+        outputExcel($title, $headers, $data, 'recv_list_' . date('Ymd'));
+    }
+}
+
+// ─── Receiving Detail Export ────────────────────────────────────────────────
+function exportRecvDetail(string $format): void
+{
+    global $conn;
+    $seq = (int)($_GET['seq'] ?? 0);
+    if ($seq <= 0) { http_response_code(400); exit; }
+
+    $r_hdr = mysqli_query($conn, "
+        SELECT h.*,
+               v.VndName, v.VndTel, v.VndFax, v.VndEmail, v.VndTaxNo,
+               v.VndAdd1, v.VndAdd2, v.VndAdd3, v.VndAdd4, v.VndPayee,
+               (SELECT SUM(Amount)    FROM invrecv1 WHERE SeqNo = h.SeqNo) AS TotalAmount,
+               (SELECT SUM(NetAmount) FROM invrecv1 WHERE SeqNo = h.SeqNo) AS SubTotal,
+               (SELECT SUM(TaxAmt)    FROM invrecv1 WHERE SeqNo = h.SeqNo) AS TaxTotal
+        FROM invrecv0 h LEFT JOIN gblvend v ON h.VndCode = v.VndCode
+        WHERE h.SeqNo = $seq
+    ");
+    $rv = mysqli_fetch_assoc($r_hdr);
+    if (!$rv) { http_response_code(404); exit; }
+
+    $r_items = mysqli_query($conn, "
+        SELECT d.DtlNo, d.PrdID, d.Remark, d.Qty, d.Unit, d.Cost, d.UnitRate,
+               d.NetAmount, d.TaxAmt, d.Amount, d.DeptCode, d.AcCode,
+               p.PrdDescE, p.PrdDescT
+        FROM invrecv1 d
+        LEFT JOIN gblprod p ON p.PrdId = d.PrdID
+        WHERE d.SeqNo = $seq ORDER BY d.DtlNo
+    ");
+    $items = [];
+    while ($i = mysqli_fetch_assoc($r_items)) $items[] = $i;
+
+    if ($format === 'pdf') {
+        outputRecvDetailPdf($rv, $items);
+    } else {
+        $descFor = function($i) {
+            $d = trim(db_str($i['Remark'] ?? ''));
+            if ($d === '' || strcasecmp($d, 'NULL') === 0) $d = trim(db_str($i['PrdDescT'] ?? ''));
+            if ($d === '' || strcasecmp($d, 'NULL') === 0) $d = trim(db_str($i['PrdDescE'] ?? ''));
+            return $d ?: '—';
+        };
+        $title   = 'RCV: ' . $rv['RecvNo'] . ' | ' . db_str($rv['VndName']);
+        $headers = ['#','รหัสสินค้า','รายละเอียด','แผนก','บัญชี','จำนวน','หน่วย','ทุน/หน่วย','อัตรา','ก่อนภาษี','ภาษี','รวมสุทธิ'];
+        $data = array_map(fn($i) => [
+            $i['DtlNo'], $i['PrdID'], $descFor($i),
+            $i['DeptCode'], $i['AcCode'],
+            (float)$i['Qty'], $i['Unit'],
+            (float)$i['Cost'], (float)$i['UnitRate'],
+            (float)$i['NetAmount'], (float)$i['TaxAmt'], (float)$i['Amount'],
+        ], $items);
+        outputExcel($title, $headers, $data, 'recv_detail_' . $seq . '_' . date('Ymd'));
+    }
+}
+
+// ─── Receiving Detail PDF (Pavilions letterhead) ────────────────────────────
+function outputRecvDetailPdf(array $rv, array $items): void
+{
+    $typeLabel = ($rv['InvType'] ?? '') === 'I' ? 'Inventory' : 'Direct';
+
+    $subTotal    = (float)($rv['SubTotal']    ?? 0);
+    $taxTotal    = (float)($rv['TaxTotal']    ?? 0);
+    $totalAmount = (float)($rv['TotalAmount'] ?? 0);
+    $extCost     = (float)($rv['ExtCost']     ?? 0);
+
+    $clean = function($v) {
+        $v = trim((string)$v);
+        if ($v === '' || strcasecmp($v, 'NULL') === 0) return null;
+        return $v;
+    };
+    $addr_parts = [];
+    foreach (['VndAdd1','VndAdd2','VndAdd3','VndAdd4'] as $f) {
+        $p = $clean(db_str($rv[$f] ?? ''));
+        if ($p !== null) $addr_parts[] = $p;
+    }
+    $vAddr  = implode(' ', $addr_parts);
+    $vTel   = $clean($rv['VndTel']   ?? '');
+    $vTax   = $clean($rv['VndTaxNo'] ?? '');
+    $remark = $clean(db_str($rv['Remark'] ?? ''));
+
+    ob_start();
+    ?>
+    <style>
+      body{font-family:'sarabun','dejavusans';font-size:9pt;color:#1f2937;line-height:1.55}
+      .label{color:#6b7280;font-size:7.5pt;letter-spacing:.5px;text-transform:uppercase}
+      .section-title{color:#1e3a5f;font-size:9pt;font-weight:bold;letter-spacing:1px;
+        text-transform:uppercase;border-bottom:1px solid #e5e7eb;padding-bottom:4px;margin-bottom:6px}
+      .items{width:100%;border-collapse:collapse;margin-top:4px}
+      .items th{background:#1e3a5f;color:#fff;padding:8px 5px;font-size:7.5pt;font-weight:bold;
+        letter-spacing:.3px;text-transform:uppercase}
+      .items td{padding:7px 5px;border-bottom:1px solid #f3f4f6;font-size:8.5pt;vertical-align:middle}
+      .items tbody tr:nth-child(even) td{background:#fafbfc}
+      .totals td{padding:5px 0;font-size:9.5pt}
+      .grand{color:#1e3a5f;font-weight:bold;font-size:13pt}
+      .grand-top{border-top:2px solid #1e3a5f;padding-top:8px!important}
+    </style>
+
+    <?php
+    $logoPath = '';
+    foreach (['png','jpg','jpeg','gif'] as $ext) {
+        $p = __DIR__ . '/assets/pavilions-logo.' . $ext;
+        if (is_file($p)) { $logoPath = $p; break; }
+    }
+    $hasLogo = $logoPath !== '';
+    ?>
+    <!-- Header -->
+    <table width="100%" style="border-bottom:2px solid #1e3a5f;padding-bottom:12px;margin-bottom:16px">
+      <tr>
+        <td width="85" style="vertical-align:middle;text-align:center">
+          <?php if ($hasLogo): ?>
+            <img src="<?= $logoPath ?>" style="width:72px;height:72px">
+          <?php else: ?>
+            <div style="width:55px;height:55px;background:#1e3a5f;color:#fff;text-align:center;font-weight:bold;font-size:20pt;border-radius:50%;line-height:55px;margin:auto">TP</div>
+          <?php endif; ?>
+        </td>
+        <td style="text-align:center;vertical-align:middle">
+          <div style="font-size:18pt;font-weight:bold;color:#1e3a5f;letter-spacing:3px">RECEIVING REPORT</div>
+          <div style="font-size:12pt;font-weight:bold;color:#1f2937;margin-top:5px"><?= htmlspecialchars(COMPANY_NAME) ?></div>
+          <div style="font-size:8pt;color:#6b7280;margin-top:2px"><?= htmlspecialchars(COMPANY_ADDRESS) ?></div>
+          <div style="font-size:8pt;color:#6b7280">Tel <?= htmlspecialchars(COMPANY_TEL) ?>  ·  Tax ID <?= htmlspecialchars(COMPANY_TAX_ID) ?></div>
+        </td>
+        <td width="85" style="vertical-align:top;text-align:right;padding-top:6px">
+          <div style="background:#1e3a5f;color:#fff;padding:5px 12px;border-radius:14px;font-size:8pt;font-weight:bold;letter-spacing:.5px;display:inline-block">
+            <?= htmlspecialchars(strtoupper($typeLabel)) ?>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Receiving Info -->
+    <table width="100%" style="margin-bottom:18px">
+      <tr>
+        <td width="33%" style="padding:2px 0">
+          <div class="label">Receiving No</div>
+          <div style="font-weight:bold;font-size:12pt;color:#1e3a5f;margin-top:2px"><?= htmlspecialchars($rv['RecvNo']) ?></div>
+        </td>
+        <td width="33%" style="padding:2px 0">
+          <div class="label">Receiving Date</div>
+          <div style="font-weight:bold;font-size:10pt;margin-top:2px"><?= fmt_date($rv['RecvDate']) ?></div>
+        </td>
+        <td width="34%" style="padding:2px 0">
+          <div class="label">PO Number</div>
+          <div style="font-weight:bold;font-size:10pt;color:#0ea5e9;margin-top:2px"><?= htmlspecialchars($rv['PoNo'] ?: '-') ?></div>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:10px 0 2px 0;font-size:9pt">
+          <?php if (!empty($rv['RefNo'])): ?><span class="label">Reference</span>  <strong><?= htmlspecialchars($rv['RefNo']) ?></strong><?php endif; ?>
+        </td>
+        <td style="padding:10px 0 2px 0;font-size:9pt">
+          <?php if (!empty($rv['LocaCode'])): ?><span class="label">Location</span>  <strong><?= htmlspecialchars($rv['LocaCode']) ?></strong><?php endif; ?>
+        </td>
+        <td style="padding:10px 0 2px 0;font-size:9pt">
+          <?php if (!empty($rv['CreateUser'])): ?><span class="label">Received By</span>  <strong><?= htmlspecialchars(db_str($rv['CreateUser'])) ?></strong><?php endif; ?>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Supplier -->
+    <table width="100%" style="margin-bottom:16px">
+      <tr>
+        <td width="48%" style="vertical-align:top">
+          <div class="section-title">Received At</div>
+          <div style="font-weight:bold;font-size:10.5pt"><?= htmlspecialchars(COMPANY_NAME) ?></div>
+          <div style="font-size:9pt;color:#4b5563;margin-top:3px"><?= htmlspecialchars($rv['LocaCode'] ?: '') ?></div>
+        </td>
+        <td width="4%"></td>
+        <td width="48%" style="vertical-align:top">
+          <div class="section-title">Supplier</div>
+          <div style="font-weight:bold;font-size:10.5pt"><?= htmlspecialchars(db_str($rv['VndName'])) ?></div>
+          <div style="font-size:8pt;color:#9ca3af">Code  <?= htmlspecialchars($rv['VndCode']) ?></div>
+          <?php if ($vAddr): ?><div style="font-size:9pt;color:#4b5563;margin-top:3px"><?= htmlspecialchars($vAddr) ?></div><?php endif; ?>
+          <div style="font-size:9pt;color:#4b5563;margin-top:5px">
+            <?php if ($vTel): ?>Tel <?= htmlspecialchars($vTel) ?><?php endif; ?>
+            <?php if ($vTax): ?><br>Tax ID <?= htmlspecialchars($vTax) ?><?php endif; ?>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <?php if ($remark): ?>
+    <div style="margin-bottom:14px;padding:10px 14px;background:#fef3c7;border-left:3px solid #f59e0b;font-size:9pt;color:#78350f;border-radius:0 4px 4px 0">
+      <span class="label" style="color:#92400e">Remark</span><br>
+      <span style="font-size:9.5pt"><?= nl2br(htmlspecialchars($remark)) ?></span>
+    </div>
+    <?php endif; ?>
+
+    <!-- Items table -->
+    <table class="items" style="margin-top:10px">
+      <thead>
+        <tr>
+          <th width="20">#</th>
+          <th width="62" style="text-align:left">Item Code</th>
+          <th style="text-align:left">Description</th>
+          <th width="58" style="text-align:left">Dep/Acc</th>
+          <th width="34">Unit</th>
+          <th width="42" style="text-align:right">Qty</th>
+          <th width="48" style="text-align:right">Cost/Unit</th>
+          <th width="60" style="text-align:right">Ex.Tax</th>
+          <th width="48" style="text-align:right">Tax</th>
+          <th width="62" style="text-align:right">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach ($items as $idx => $item):
+          $desc = trim(db_str($item['Remark'] ?? ''));
+          if ($desc === '' || strcasecmp($desc, 'NULL') === 0) $desc = trim(db_str($item['PrdDescT'] ?? ''));
+          if ($desc === '' || strcasecmp($desc, 'NULL') === 0) $desc = trim(db_str($item['PrdDescE'] ?? ''));
+          if ($desc === '' || strcasecmp($desc, 'NULL') === 0) $desc = '—';
+          $dep = trim((string)($item['DeptCode'] ?? ''));
+          $acc = trim((string)($item['AcCode'] ?? ''));
+          $depAcc = $dep . ($dep !== '' && $acc !== '' ? '/' : '') . $acc;
+        ?>
+        <tr<?= $idx % 2 === 0 ? '' : ' style="background:#fafbfc"' ?>>
+          <td style="text-align:center"><?= $idx + 1 ?></td>
+          <td style="font-family:monospace;font-size:7.5pt"><?= htmlspecialchars($item['PrdID']) ?></td>
+          <td><?= htmlspecialchars($desc) ?></td>
+          <td style="font-size:7.5pt;color:#6b7280"><?= htmlspecialchars($depAcc) ?></td>
+          <td style="text-align:center"><?= htmlspecialchars($item['Unit']) ?></td>
+          <td style="text-align:right"><?= number_format((float)$item['Qty'], 2) ?></td>
+          <td style="text-align:right"><?= number_format((float)$item['Cost'], 2) ?></td>
+          <td style="text-align:right"><?= number_format((float)$item['NetAmount'], 2) ?></td>
+          <td style="text-align:right"><?= number_format((float)$item['TaxAmt'], 2) ?></td>
+          <td style="text-align:right;font-weight:bold"><?= number_format((float)$item['Amount'], 2) ?></td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+
+    <!-- Totals -->
+    <table width="100%" style="margin-top:14px">
+      <tr>
+        <td width="60%"></td>
+        <td width="40%">
+          <table width="100%" class="totals">
+            <tr><td style="color:#6b7280">Sub Total (Ex.Tax)</td><td style="text-align:right"><?= number_format($subTotal, 2) ?></td></tr>
+            <tr><td style="color:#6b7280">VAT</td><td style="text-align:right"><?= number_format($taxTotal, 2) ?></td></tr>
+            <?php if ($extCost > 0): ?>
+            <tr><td style="color:#6b7280">Extra Cost</td><td style="text-align:right"><?= number_format($extCost, 2) ?></td></tr>
+            <?php endif; ?>
+            <tr><td class="grand grand-top">Total Amount</td><td class="grand grand-top" style="text-align:right"><?= number_format($totalAmount, 2) ?></td></tr>
+            <tr><td colspan="2" style="text-align:right;color:#9ca3af;font-size:8pt;padding-top:2px">Thai Baht (THB)</td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <div style="text-align:center;color:#d1d5db;font-size:7pt;margin-top:24px;padding-top:8px;border-top:1px solid #f3f4f6">
+      Generated by Inventorium  ·  <?= date('d/m/Y H:i') ?>  ·  RCV #<?= htmlspecialchars($rv['RecvNo']) ?>  ·  Page 1
+    </div>
+    <?php
+    $html = ob_get_clean();
+
+    $mpdf = makeMpdf('A4');
+    $mpdf->SetTitle('RCV ' . $rv['RecvNo']);
+    $mpdf->WriteHTML($html);
+    $mpdf->Output('RCV_' . preg_replace('/[^A-Za-z0-9_-]/', '_', $rv['RecvNo']) . '_' . date('Ymd') . '.pdf', 'D');
+    exit;
 }
 
 // ─── Excel output ───────────────────────────────────────────────────────────

@@ -208,6 +208,31 @@ $GLOBALS['TRANSLATIONS'] = [
     'snapshot_tables'   => ['th' => 'ตารางที่ dump: invpo0, invpo1, gblvend, gblprod', 'en' => 'Tables: invpo0, invpo1, gblvend, gblprod'],
     'snapshot_nav'      => ['th' => 'Re-Snapshot DB',     'en' => 'Re-Snapshot DB'],
     'snapshot_stats'    => ['th' => 'สถิติข้อมูลปัจจุบัน', 'en' => 'Current Data Stats'],
+
+    // ── Receiving (รับสินค้า) ──
+    'recv_nav'          => ['th' => 'รับสินค้า',          'en' => 'Receiving'],
+    'recv_list_title'   => ['th' => 'รายการรับสินค้า',     'en' => 'Receiving List'],
+    'recv_records'      => ['th' => 'ใบรับสินค้า',         'en' => 'Receiving Records'],
+    'recv_detail_title' => ['th' => 'รายละเอียดการรับสินค้า', 'en' => 'Receiving Detail'],
+    'recv_items'        => ['th' => 'รายการสินค้าที่รับ',   'en' => 'Received Items'],
+    'recv_no'           => ['th' => 'เลขที่รับ',           'en' => 'Receiving No.'],
+    'recv_date'         => ['th' => 'วันที่รับ',           'en' => 'Receiving Date'],
+    'recv_type'         => ['th' => 'ประเภทการรับ',        'en' => 'Receiving Type'],
+    'recv_type_inv'     => ['th' => 'เข้าสต็อก',           'en' => 'Inventory'],
+    'recv_type_direct'  => ['th' => 'ซื้อตรง',             'en' => 'Direct'],
+    'recv_ext_cost'     => ['th' => 'ค่าใช้จ่ายเพิ่ม',      'en' => 'Extra Cost'],
+    'back_to_recv'      => ['th' => 'กลับรายการรับสินค้า',  'en' => 'Back to Receiving List'],
+    'col_recv_no'       => ['th' => 'เลขที่รับ',           'en' => 'Recv No.'],
+    'col_po_ref'        => ['th' => 'PO / Ref',           'en' => 'PO / Ref'],
+    'col_cost_unit'     => ['th' => 'ทุน/หน่วย',           'en' => 'Cost/Unit'],
+    'col_unit_rate'     => ['th' => 'อัตราหน่วย',          'en' => 'Unit Rate'],
+    'col_amt_extax'     => ['th' => 'ก่อนภาษี',           'en' => 'Amt Ex.Tax'],
+    'col_tax_amt'       => ['th' => 'ภาษี',               'en' => 'Tax Amt'],
+    'col_amount_incl'   => ['th' => 'รวมสุทธิ',           'en' => 'Amount'],
+    'col_dep_acc'       => ['th' => 'แผนก / บัญชี',        'en' => 'Dept / Acc'],
+    'product_label'     => ['th' => 'รหัสสินค้า',          'en' => 'Product'],
+    'ref_no_label'      => ['th' => 'เลขอ้างอิง',          'en' => 'Reference #'],
+    'recv_total_all'    => ['th' => 'ยอดรวมทั้งหมด',       'en' => 'Grand Total'],
 ];
 
 function t(string $key): string {
