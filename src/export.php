@@ -465,7 +465,14 @@ function exportVendor(string $format): void
         $where .= " AND (VndName LIKE '%$s_tis%' OR VndCode LIKE '%$s_ascii%' OR VndAdd1 LIKE '%$s_tis%' OR VndTel LIKE '%$s_ascii%' OR VndTaxNo LIKE '%$s_ascii%')";
     }
     $where .= recv_range_clause('VndCode', $vnd_from, $vnd_to);
-    $where .= recv_range_clause('VndName', $vname_from, $vname_to);
+    // VndName is TIS-620 — use db_search() (charset-converting) instead of recv_range_clause's plain db_escape
+    if ($vname_from !== '' || $vname_to !== '') {
+        $vnf = db_search($vname_from);
+        $vnt = db_search($vname_to);
+        if ($vname_from !== '' && $vname_to !== '') $where .= " AND VndName BETWEEN '$vnf' AND '$vnt'";
+        elseif ($vname_from !== '') $where .= " AND VndName >= '$vnf'";
+        else $where .= " AND VndName <= '$vnt'";
+    }
 
     $result = mysqli_query($conn, "
         SELECT VndCode, VndName, VndAdd1, VndAdd2, VndAdd3, VndAdd4,

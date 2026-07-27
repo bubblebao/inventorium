@@ -18,7 +18,14 @@ if ($search !== '') {
     $where .= " AND (VndName LIKE '%$s_tis%' OR VndCode LIKE '%$s_ascii%' OR VndAdd1 LIKE '%$s_tis%' OR VndTel LIKE '%$s_ascii%' OR VndTaxNo LIKE '%$s_ascii%')";
 }
 $where .= recv_range_clause('VndCode', $vnd_from, $vnd_to);
-$where .= recv_range_clause('VndName', $vname_from, $vname_to);
+// VndName is TIS-620 — use db_search() (charset-converting) instead of recv_range_clause's plain db_escape
+if ($vname_from !== '' || $vname_to !== '') {
+    $vnf = db_search($vname_from);
+    $vnt = db_search($vname_to);
+    if ($vname_from !== '' && $vname_to !== '') $where .= " AND VndName BETWEEN '$vnf' AND '$vnt'";
+    elseif ($vname_from !== '') $where .= " AND VndName >= '$vnf'";
+    else $where .= " AND VndName <= '$vnt'";
+}
 
 $active_filters = ($vnd_from !== '' ? 1 : 0) + ($vnd_to !== '' ? 1 : 0) + ($vname_from !== '' ? 1 : 0) + ($vname_to !== '' ? 1 : 0);
 
@@ -31,7 +38,8 @@ $result = mysqli_query($conn, "
 ");
 
 // ── Datalist data (พิมพ์ค้นหาได้ — ไม่ผูกกับผลค้นหาปัจจุบัน) ──
-$r_vnd_dl = mysqli_query($conn, "SELECT VndCode, VndName FROM gblvend ORDER BY VndCode");
+$r_vnd_dl     = mysqli_query($conn, "SELECT VndCode, VndName FROM gblvend ORDER BY VndCode");
+$r_vndname_dl = mysqli_query($conn, "SELECT VndCode, VndName FROM gblvend ORDER BY VndName");
 
 require_once __DIR__ . '/includes/header.php';
 ?>
@@ -64,9 +72,9 @@ require_once __DIR__ . '/includes/header.php';
       <div class="col-12 col-md-6 col-xl-4">
         <label class="form-label small fw-bold mb-1"><i class="bi bi-building me-1 text-muted"></i><?= t('vendor_name') ?></label>
         <div class="d-flex gap-1">
-          <input type="text" name="vname_from" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($vname_from) ?>">
+          <input type="text" name="vname_from" list="dl_vndname" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($vname_from) ?>">
           <span class="align-self-center text-muted small">→</span>
-          <input type="text" name="vname_to" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($vname_to) ?>">
+          <input type="text" name="vname_to" list="dl_vndname" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($vname_to) ?>">
         </div>
       </div>
 
@@ -81,6 +89,7 @@ require_once __DIR__ . '/includes/header.php';
 
 <!-- Datalists -->
 <datalist id="dl_vnd"><?php while ($v = mysqli_fetch_assoc($r_vnd_dl)): ?><option value="<?= htmlspecialchars($v['VndCode']) ?>"><?= htmlspecialchars(db_str($v['VndName'])) ?></option><?php endwhile; ?></datalist>
+<datalist id="dl_vndname"><?php while ($v = mysqli_fetch_assoc($r_vndname_dl)): $vn = db_str($v['VndName']); if ($vn === '' || strcasecmp($vn, 'NULL') === 0) continue; ?><option value="<?= htmlspecialchars($vn) ?>"><?= htmlspecialchars($v['VndCode']) ?></option><?php endwhile; ?></datalist>
 
 <div class="card">
   <div class="card-header-inv d-flex align-items-center justify-content-between">
