@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/recv_filter.php';
 
 $prd_id = trim($_GET['prd_id'] ?? '');
 $search = trim($_GET['search'] ?? '');
@@ -397,9 +398,21 @@ if ($prd_id !== '') {
 
     <!-- PO History -->
     <div class="card">
-      <div class="card-header-inv">
-        <i class="bi bi-clock-history me-1"></i> <?= t('purchase_history') ?>
-        <span class="badge ms-1" style="background:rgba(255,255,255,.2)"><?= t('latest_200') ?></span>
+      <div class="card-header-inv d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <span>
+          <i class="bi bi-clock-history me-1"></i> <?= t('purchase_history') ?>
+          <span class="badge ms-1" style="background:rgba(255,255,255,.2)"><?= t('latest_200') ?></span>
+        </span>
+        <div class="d-flex gap-1">
+          <a href="<?= htmlspecialchars('/export.php?' . http_build_query(['type' => 'item_detail', 'format' => 'excel', 'prd_id' => $prd_id])) ?>" class="btn btn-sm"
+             style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)" target="_blank">
+            <i class="bi bi-file-earmark-excel me-1"></i> Excel
+          </a>
+          <a href="<?= htmlspecialchars('/export.php?' . http_build_query(['type' => 'item_detail', 'format' => 'pdf', 'prd_id' => $prd_id])) ?>" class="btn btn-sm"
+             style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)" target="_blank">
+            <i class="bi bi-file-earmark-pdf me-1"></i> PDF
+          </a>
+        </div>
       </div>
       <div class="card-body p-0">
         <div class="table-responsive">
@@ -466,12 +479,23 @@ $LIMIT = 100;
 $results = null;
 $is_default = false;
 
+// ── Filter — From/To range (Item Code / Category) ──
+$prd_from = strtoupper(trim($_GET['prd_from'] ?? ''));
+$prd_to   = strtoupper(trim($_GET['prd_to']   ?? ''));
+$cat_from = strtoupper(trim($_GET['cat_from'] ?? ''));
+$cat_to   = strtoupper(trim($_GET['cat_to']   ?? ''));
+
+$range_where  = recv_range_clause('PrdId',    $prd_from, $prd_to);
+$range_where .= recv_range_clause('CateCode', $cat_from, $cat_to);
+$active_filters = ($prd_from !== '' ? 1 : 0) + ($prd_to !== '' ? 1 : 0) + ($cat_from !== '' ? 1 : 0) + ($cat_to !== '' ? 1 : 0);
+
 if ($search === '') {
     // Default: แสดงสินค้าทั้งหมดเรียงตาม PrdId (Active ขึ้นก่อน)
     $is_default = true;
     $results = mysqli_query($conn, "
         SELECT PrdId, Barcode, PrdDescE, PrdDescT, BaseUnit, LastCost, OnHand, Active
         FROM gblprod
+        WHERE 1=1 $range_where
         ORDER BY Active DESC, PrdId ASC
         LIMIT $LIMIT
     ");
@@ -485,7 +509,7 @@ if ($search === '') {
         $e_tis   = db_search($w);          // สำหรับ field ที่อาจเป็น TIS-620 (PrdDescT, PrdDescE)
         $conds[] = "(PrdId LIKE '%$e_ascii%' OR Barcode LIKE '%$e_ascii%' OR PrdDescE LIKE '%$e_tis%' OR PrdDescT LIKE '%$e_tis%' OR VndCode LIKE '%$e_ascii%')";
     }
-    $where = implode(' AND ', $conds);
+    $where = implode(' AND ', $conds) . $range_where;
 
     // Relevance ranking — exact PrdId > startswith > contains
     $first_word = db_escape($words[0] ?? '');
@@ -511,18 +535,43 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 
 <div class="card mb-3">
-  <div class="card-header-inv"><i class="bi bi-search me-1"></i> <?= t('search_item') ?></div>
+  <div class="card-header-inv d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-funnel me-1"></i> <?= t('filter') ?> <span style="font-weight:400;opacity:.8;font-size:12px">— <?= t('date_from') ?> / <?= t('date_to') ?></span></span>
+    <?php if ($active_filters > 0): ?><span class="badge" style="background:rgba(255,255,255,.25)"><?= $active_filters ?></span><?php endif; ?>
+  </div>
   <div class="card-body">
-    <form method="GET" class="row g-2 align-items-end">
-      <div class="col-md-6">
-        <label class="form-label small fw-bold"><?= t('item_search_label') ?></label>
-        <input type="text" name="search" class="form-control"
+    <form method="GET" class="row g-3 align-items-end">
+      <div class="col-12 col-md-6 col-xl-4">
+        <label class="form-label small fw-bold mb-1"><i class="bi bi-search me-1 text-muted"></i><?= t('item_search_label') ?></label>
+        <input type="text" name="search" class="form-control form-control-sm"
                placeholder="<?= t('item_search_ph') ?>" autofocus
                value="<?= htmlspecialchars($search) ?>">
       </div>
-      <div class="col-auto d-flex gap-1">
+
+      <!-- Item Code range -->
+      <div class="col-12 col-md-6 col-xl-4">
+        <label class="form-label small fw-bold mb-1"><i class="bi bi-upc-scan me-1 text-muted"></i><?= t('item_code') ?></label>
+        <div class="d-flex gap-1">
+          <input type="text" name="prd_from" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($prd_from) ?>" style="text-transform:uppercase">
+          <span class="align-self-center text-muted small">→</span>
+          <input type="text" name="prd_to" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($prd_to) ?>" style="text-transform:uppercase">
+        </div>
+      </div>
+
+      <!-- Category range -->
+      <div class="col-12 col-md-6 col-xl-4">
+        <label class="form-label small fw-bold mb-1"><i class="bi bi-tags me-1 text-muted"></i><?= t('category') ?></label>
+        <div class="d-flex gap-1">
+          <input type="text" name="cat_from" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($cat_from) ?>" style="text-transform:uppercase">
+          <span class="align-self-center text-muted small">→</span>
+          <input type="text" name="cat_to" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($cat_to) ?>" style="text-transform:uppercase">
+        </div>
+      </div>
+
+      <div class="col-12 d-flex gap-1">
         <button type="submit" class="btn btn-inv-primary"><i class="bi bi-search"></i> <?= t('search') ?></button>
-        <a href="/item_history.php" class="btn btn-inv-outline"><?= t('reset') ?></a>
+        <a href="/item_history.php" class="btn btn-inv-outline"><i class="bi bi-x-lg"></i> <?= t('reset') ?></a>
+        <span class="small text-muted align-self-center ms-1">💡 เว้น "To" = ค่าเดียว · ใส่ทั้งคู่ = ช่วง</span>
       </div>
     </form>
   </div>
@@ -548,14 +597,32 @@ $showing_max  = $is_default && $result_count >= $LIMIT;
         </span>
       <?php endif; ?>
     </span>
-    <?php if ($showing_max): ?>
-      <span style="font-size:11px;opacity:.85">
-        <i class="bi bi-info-circle"></i>
-        <?= $GLOBALS['LANG']==='th'
-          ? 'แสดง '.$LIMIT.' แรก — ใช้ช่องค้นหาเพื่อกรองให้แคบลง'
-          : 'Showing first '.$LIMIT.' — use search to filter further' ?>
-      </span>
-    <?php endif; ?>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <?php if ($showing_max): ?>
+        <span style="font-size:11px;opacity:.85">
+          <i class="bi bi-info-circle"></i>
+          <?= $GLOBALS['LANG']==='th'
+            ? 'แสดง '.$LIMIT.' แรก — ใช้ช่องค้นหาเพื่อกรองให้แคบลง'
+            : 'Showing first '.$LIMIT.' — use search to filter further' ?>
+        </span>
+      <?php endif; ?>
+      <?php
+        $item_export_params = array_filter([
+            'search' => $search, 'prd_from' => $prd_from, 'prd_to' => $prd_to,
+            'cat_from' => $cat_from, 'cat_to' => $cat_to,
+        ], fn($v) => $v !== '');
+      ?>
+      <div class="d-flex gap-1">
+        <a href="<?= htmlspecialchars('/export.php?' . http_build_query(array_merge(['type' => 'item_list', 'format' => 'excel'], $item_export_params))) ?>" class="btn btn-sm"
+           style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)" target="_blank">
+          <i class="bi bi-file-earmark-excel me-1"></i> Excel
+        </a>
+        <a href="<?= htmlspecialchars('/export.php?' . http_build_query(array_merge(['type' => 'item_list', 'format' => 'pdf'], $item_export_params))) ?>" class="btn btn-sm"
+           style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)" target="_blank">
+          <i class="bi bi-file-earmark-pdf me-1"></i> PDF
+        </a>
+      </div>
+    </div>
   </div>
     <div class="card-body p-0">
       <div class="table-responsive">

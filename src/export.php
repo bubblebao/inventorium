@@ -23,6 +23,8 @@ switch ($type) {
     case 'dept_report': exportDeptReport($format);  break;
     case 'recv_list':   exportRecvList($format);    break;
     case 'recv_detail': exportRecvDetail($format);  break;
+    case 'item_list':   exportItemList($format);    break;
+    case 'item_detail': exportItemDetail($format);  break;
     default:            exportPoList($format);      break;
 }
 
@@ -441,10 +443,28 @@ function outputPoDetailPdf(array $po, array $items): void
 function exportVendor(string $format): void
 {
     global $conn;
+
+    $search     = trim($_GET['search'] ?? '');
+    $vnd_from   = strtoupper(trim($_GET['vnd_from']   ?? ''));
+    $vnd_to     = strtoupper(trim($_GET['vnd_to']     ?? ''));
+    $vname_from = trim($_GET['vname_from'] ?? '');
+    $vname_to   = trim($_GET['vname_to']   ?? '');
+
+    $where = '1=1';
+    if ($search !== '') {
+        $s_ascii = db_escape($search);
+        $s_tis   = db_search($search);
+        $where .= " AND (VndName LIKE '%$s_tis%' OR VndCode LIKE '%$s_ascii%' OR VndAdd1 LIKE '%$s_tis%' OR VndTel LIKE '%$s_ascii%' OR VndTaxNo LIKE '%$s_ascii%')";
+    }
+    $where .= recv_range_clause('VndCode', $vnd_from, $vnd_to);
+    $where .= recv_range_clause('VndName', $vname_from, $vname_to);
+
     $result = mysqli_query($conn, "
         SELECT VndCode, VndName, VndAdd1, VndAdd2, VndAdd3, VndAdd4,
                VndTel, VndEmail, VndTaxNo, VndCurBal, VndTerm, VndMobile, VndCatCode
-        FROM gblvend ORDER BY VndName
+        FROM gblvend
+        WHERE $where
+        ORDER BY VndName
     ");
     $rows = [];
     while ($r = mysqli_fetch_assoc($result)) $rows[] = $r;
@@ -455,7 +475,9 @@ function exportVendor(string $format): void
         return (strcasecmp($v, 'NULL') === 0 || $v === '') ? '' : $v;
     };
 
-    $title   = 'รายชื่อ Vendor — ' . fmt_date(date('Y-m-d'));
+    $title = 'รายชื่อ Vendor — ' . fmt_date(date('Y-m-d'));
+    if ($search !== '') $title .= ' (ค้นหา: ' . $search . ')';
+    if ($vnd_from !== '' || $vnd_to !== '') $title .= ' [' . ($vnd_from ?: '…') . '-' . ($vnd_to ?: '…') . ']';
     $headers = ['รหัส','ชื่อ Vendor','ที่อยู่ 1','ที่อยู่ 2','ที่อยู่ 3','ที่อยู่ 4','โทรศัพท์','Email','Tax No','ยอดค้าง','เครดิต(วัน)','มือถือ','หมวด'];
     $data = array_map(fn($r) => [
         $r['VndCode'], db_str($r['VndName']),
@@ -826,6 +848,99 @@ function outputRecvDetailPdf(array $rv, array $items): void
     $mpdf->WriteHTML($html);
     $mpdf->Output('RCV_' . preg_replace('/[^A-Za-z0-9_-]/', '_', $rv['RecvNo']) . '_' . date('Ymd') . '.pdf', 'D');
     exit;
+}
+
+// ─── Item List Export ───────────────────────────────────────────────────────
+function exportItemList(string $format): void
+{
+    global $conn;
+
+    $search   = trim($_GET['search'] ?? '');
+    $prd_from = strtoupper(trim($_GET['prd_from'] ?? ''));
+    $prd_to   = strtoupper(trim($_GET['prd_to']   ?? ''));
+    $cat_from = strtoupper(trim($_GET['cat_from'] ?? ''));
+    $cat_to   = strtoupper(trim($_GET['cat_to']   ?? ''));
+
+    $where = '1=1';
+    if ($search !== '') {
+        $words = preg_split('/\s+/', $search, -1, PREG_SPLIT_NO_EMPTY);
+        foreach ($words as $w) {
+            $e_ascii = db_escape($w);
+            $e_tis   = db_search($w);
+            $where .= " AND (PrdId LIKE '%$e_ascii%' OR Barcode LIKE '%$e_ascii%' OR PrdDescE LIKE '%$e_tis%' OR PrdDescT LIKE '%$e_tis%' OR VndCode LIKE '%$e_ascii%')";
+        }
+    }
+    $where .= recv_range_clause('PrdId',    $prd_from, $prd_to);
+    $where .= recv_range_clause('CateCode', $cat_from, $cat_to);
+
+    $result = mysqli_query($conn, "
+        SELECT PrdId, Barcode, PrdDescE, PrdDescT, BaseUnit, LastCost, OnHand, Active
+        FROM gblprod
+        WHERE $where
+        ORDER BY Active DESC, PrdId ASC
+    ");
+    $rows = [];
+    while ($r = mysqli_fetch_assoc($result)) $rows[] = $r;
+
+    $title = 'รายการสินค้า — ' . fmt_date(date('Y-m-d'));
+    if ($search !== '') $title .= ' (ค้นหา: ' . $search . ')';
+
+    $headers = ['รหัสสินค้า','Barcode','ชื่อ (EN)','ชื่อ (TH)','หน่วย','ทุนล่าสุด','คงเหลือ','สถานะ'];
+    $data = array_map(fn($r) => [
+        $r['PrdId'], $r['Barcode'],
+        db_str($r['PrdDescE']), db_str($r['PrdDescT']),
+        $r['BaseUnit'], (float)$r['LastCost'], (float)$r['OnHand'],
+        (int)$r['Active'] === 0 ? 'Inactive' : 'Active',
+    ], $rows);
+
+    if ($format === 'pdf') {
+        outputPdf($title, $headers, $data, 'A4-L');
+    } else {
+        outputExcel($title, $headers, $data, 'item_list_' . date('Ymd'));
+    }
+}
+
+// ─── Item Detail (PO History) Export ────────────────────────────────────────
+function exportItemDetail(string $format): void
+{
+    global $conn;
+    $prd_id = trim($_GET['prd_id'] ?? '');
+    if ($prd_id === '') { http_response_code(400); exit; }
+    $prd_id_safe = db_escape($prd_id);
+
+    $r_item = mysqli_query($conn, "SELECT PrdDescE, PrdDescT FROM gblprod WHERE PrdId = '$prd_id_safe' LIMIT 1");
+    $prod = $r_item ? mysqli_fetch_assoc($r_item) : null;
+    $desc = $prod ? (db_str($prod['PrdDescT'] ?? '') ?: db_str($prod['PrdDescE'] ?? '')) : '';
+
+    $result = mysqli_query($conn, "
+        SELECT h.PoNo, h.PoDate, h.VndCode, v.VndName,
+               d.Qty, d.Unit, d.Price, d.Discount, d.Amount
+        FROM invpo1 d
+        INNER JOIN invpo0 h ON h.SeqNo = d.SeqNo
+        LEFT JOIN gblvend v ON h.VndCode = v.VndCode
+        WHERE d.PrdID = '$prd_id_safe'
+        ORDER BY h.PoDate DESC, h.SeqNo DESC
+        LIMIT 200
+    ");
+    $rows = [];
+    while ($r = mysqli_fetch_assoc($result)) $rows[] = $r;
+
+    $title   = 'ประวัติสั่งซื้อ: ' . $prd_id . ($desc !== '' ? ' — ' . $desc : '');
+    $headers = ['วันที่ PO','เลข PO','รหัส Vendor','ชื่อ Vendor','จำนวน','หน่วย','ราคา/หน่วย','ส่วนลด','ยอดรวม'];
+    $data = array_map(fn($r) => [
+        fmt_date($r['PoDate']),
+        $r['PoNo'],
+        $r['VndCode'],
+        db_str($r['VndName']),
+        (float)$r['Qty'], $r['Unit'],
+        (float)$r['Price'], (float)$r['Discount'], (float)$r['Amount'],
+    ], $rows);
+
+    if ($format === 'pdf') {
+        outputPdf($title, $headers, $data, 'A4-L');
+    } else {
+        outputExcel($title, $headers, $data, 'item_detail_' . $prd_id . '_' . date('Ymd'));
+    }
 }
 
 // ─── Excel output ───────────────────────────────────────────────────────────

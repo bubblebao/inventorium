@@ -85,6 +85,9 @@ $base_params = array_filter(array_merge($filter_params, [
     'dir'  => $sort_dir !== 'DESC'   ? $sort_dir  : '',
 ]));
 
+// Count active filters (นอกเหนือจากวันที่) — โชว์ badge
+$active_filters = ($vnd_code !== '' ? 1 : 0) + ($inv_no !== '' ? 1 : 0) + ($source !== '' ? 1 : 0);
+
 require_once __DIR__ . '/includes/header.php';
 
 // Helper: build sortable <th>
@@ -132,7 +135,10 @@ function sort_th(string $col, string $label, string $cur_sort, string $cur_dir, 
 
 <!-- Filter Card -->
 <div class="card mb-3">
-  <div class="card-header-inv"><i class="bi bi-funnel me-1"></i> <?= t('filter') ?></div>
+  <div class="card-header-inv d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-funnel me-1"></i> <?= t('filter') ?></span>
+    <?php if ($active_filters > 0): ?><span class="badge" style="background:rgba(255,255,255,.25)"><?= $active_filters ?></span><?php endif; ?>
+  </div>
   <div class="card-body">
     <form method="GET" class="row g-2 align-items-end">
       <div class="col-md-2">

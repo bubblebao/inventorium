@@ -1,21 +1,32 @@
 <?php
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/recv_filter.php';
 $page_title = t('vendor');
 
 $search = $_GET['search'] ?? '';
 
-$where = '';
+// ── Filter — From/To range (Vendor Code / Vendor Name) ──
+$vnd_from   = strtoupper(trim($_GET['vnd_from']   ?? ''));
+$vnd_to     = strtoupper(trim($_GET['vnd_to']     ?? ''));
+$vname_from = trim($_GET['vname_from'] ?? '');
+$vname_to   = trim($_GET['vname_to']   ?? '');
+
+$where = '1=1';
 if ($search !== '') {
     $s_ascii = db_escape($search);   // VndCode, VndTel, VndTaxNo
     $s_tis   = db_search($search);   // VndName, VndAdd1 (TIS-620)
-    $where = "WHERE VndName LIKE '%$s_tis%' OR VndCode LIKE '%$s_ascii%' OR VndAdd1 LIKE '%$s_tis%' OR VndTel LIKE '%$s_ascii%' OR VndTaxNo LIKE '%$s_ascii%'";
+    $where .= " AND (VndName LIKE '%$s_tis%' OR VndCode LIKE '%$s_ascii%' OR VndAdd1 LIKE '%$s_tis%' OR VndTel LIKE '%$s_ascii%' OR VndTaxNo LIKE '%$s_ascii%')";
 }
+$where .= recv_range_clause('VndCode', $vnd_from, $vnd_to);
+$where .= recv_range_clause('VndName', $vname_from, $vname_to);
+
+$active_filters = ($vnd_from !== '' ? 1 : 0) + ($vnd_to !== '' ? 1 : 0) + ($vname_from !== '' ? 1 : 0) + ($vname_to !== '' ? 1 : 0);
 
 $result = mysqli_query($conn, "
     SELECT VndCode, VndName, VndAdd1, VndAdd2, VndTel, VndTaxNo, VndCurBal, VndTerm,
            VndLastCls
     FROM gblvend
-    $where
+    WHERE $where
     ORDER BY VndName
 ");
 
@@ -23,17 +34,43 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 
 <div class="card mb-3">
-  <div class="card-header-inv"><i class="bi bi-search me-1"></i> <?= t('vendor_search') ?></div>
+  <div class="card-header-inv d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-funnel me-1"></i> <?= t('filter') ?> <span style="font-weight:400;opacity:.8;font-size:12px">— <?= t('date_from') ?> / <?= t('date_to') ?></span></span>
+    <?php if ($active_filters > 0): ?><span class="badge" style="background:rgba(255,255,255,.25)"><?= $active_filters ?></span><?php endif; ?>
+  </div>
   <div class="card-body">
-    <form method="GET" class="row g-2 align-items-end">
-      <div class="col-md-4">
+    <form method="GET" class="row g-3 align-items-end">
+      <div class="col-12 col-md-6 col-xl-4">
+        <label class="form-label small fw-bold mb-1"><i class="bi bi-search me-1 text-muted"></i><?= t('vendor_search') ?></label>
         <input type="text" name="search" class="form-control form-control-sm"
                placeholder="<?= t('vendor_search_ph') ?>"
                value="<?= htmlspecialchars($search) ?>">
       </div>
-      <div class="col-auto d-flex gap-1">
+
+      <!-- Vendor Code range -->
+      <div class="col-12 col-md-6 col-xl-4">
+        <label class="form-label small fw-bold mb-1"><i class="bi bi-upc me-1 text-muted"></i><?= t('vendor_code') ?></label>
+        <div class="d-flex gap-1">
+          <input type="text" name="vnd_from" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($vnd_from) ?>" style="text-transform:uppercase">
+          <span class="align-self-center text-muted small">→</span>
+          <input type="text" name="vnd_to" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($vnd_to) ?>" style="text-transform:uppercase">
+        </div>
+      </div>
+
+      <!-- Vendor Name range -->
+      <div class="col-12 col-md-6 col-xl-4">
+        <label class="form-label small fw-bold mb-1"><i class="bi bi-building me-1 text-muted"></i><?= t('vendor_name') ?></label>
+        <div class="d-flex gap-1">
+          <input type="text" name="vname_from" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($vname_from) ?>">
+          <span class="align-self-center text-muted small">→</span>
+          <input type="text" name="vname_to" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($vname_to) ?>">
+        </div>
+      </div>
+
+      <div class="col-12 d-flex gap-1">
         <button type="submit" class="btn btn-sm btn-inv-primary"><i class="bi bi-search"></i> <?= t('search') ?></button>
-        <a href="/vendor_list.php" class="btn btn-sm btn-inv-outline"><?= t('reset') ?></a>
+        <a href="/vendor_list.php" class="btn btn-sm btn-inv-outline"><i class="bi bi-x-lg"></i> <?= t('reset') ?></a>
+        <span class="small text-muted align-self-center ms-1">💡 เว้น "To" = ค่าเดียว · ใส่ทั้งคู่ = ช่วง</span>
       </div>
     </form>
   </div>
@@ -45,10 +82,22 @@ require_once __DIR__ . '/includes/header.php';
       <i class="bi bi-building me-1"></i> <?= t('vendor_list_title') ?>
       <span class="badge ms-1" data-inv-count style="background:rgba(255,255,255,.2)"><?= $result ? mysqli_num_rows($result) : 0 ?></span>
     </span>
-    <a href="/export.php?type=vendor&format=excel" class="btn btn-sm"
-       style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)" target="_blank">
-      <i class="bi bi-file-earmark-excel me-1"></i> Export
-    </a>
+    <?php
+      $vnd_export_params = array_filter([
+          'search' => $search, 'vnd_from' => $vnd_from, 'vnd_to' => $vnd_to,
+          'vname_from' => $vname_from, 'vname_to' => $vname_to,
+      ], fn($v) => $v !== '');
+    ?>
+    <div class="d-flex gap-1">
+      <a href="<?= htmlspecialchars('/export.php?' . http_build_query(array_merge(['type' => 'vendor', 'format' => 'excel'], $vnd_export_params))) ?>" class="btn btn-sm"
+         style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)" target="_blank">
+        <i class="bi bi-file-earmark-excel me-1"></i> Excel
+      </a>
+      <a href="<?= htmlspecialchars('/export.php?' . http_build_query(array_merge(['type' => 'vendor', 'format' => 'pdf'], $vnd_export_params))) ?>" class="btn btn-sm"
+         style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)" target="_blank">
+        <i class="bi bi-file-earmark-pdf me-1"></i> PDF
+      </a>
+    </div>
   </div>
   <div class="card-body p-0">
     <div class="table-responsive">
