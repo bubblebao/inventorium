@@ -14,6 +14,11 @@ define('COMPANY_ADDRESS', '31/1 Moo 6 Choengthale Sub Dist Rd. Choengthale, Thal
 define('COMPANY_TEL',     '0-7631-7600');
 define('COMPANY_TAX_ID',  '0835546002941');
 
+// ── Large exports (all-time / no filter) can build multi-MB HTML/spreadsheets —
+//    raise limits that otherwise crash mid-generation (pcre.backtrack_limit, memory) ──
+@ini_set('pcre.backtrack_limit', '20000000');
+if ((int) ini_get('memory_limit') !== -1) { @ini_set('memory_limit', '512M'); }
+
 $format = $_GET['format'] ?? 'excel'; // excel | pdf
 $type   = $_GET['type']   ?? 'po_list'; // po_list | po_detail | vendor | dept_report
 
@@ -1079,24 +1084,26 @@ function outputPdf(string $title, array $headers, array $data, string $format): 
 
     $head_html = '<thead><tr>' . implode('', array_map(fn($h) => "<th style=\"$th_style\">$h</th>", $headers)) . '</tr></thead>';
 
-    $body_html = '<tbody>';
-    foreach ($data as $idx => $row) {
-        $style = $idx % 2 === 0 ? $td_style : $td_alt;
-        $body_html .= '<tr>' . implode('', array_map(function ($val) use ($style) {
-            $align = is_float($val) || is_int($val) ? 'text-align:right;' : '';
-            $display = is_float($val) ? number_format($val, 2) : htmlspecialchars((string)$val);
-            return "<td style=\"$style$align\">$display</td>";
-        }, $row)) . '</tr>';
+    $mpdf->WriteHTML("<h2 style='color:#1a3a5c;font-size:14px;margin-bottom:8px;'>" . htmlspecialchars($title) . "</h2>");
+
+    // ── Write the table in chunks — a single giant HTML string for large exports
+    //    (e.g. "All time" with no filter) blows past pcre.backtrack_limit / memory ──
+    $CHUNK = 500;
+    foreach (array_chunk($data, $CHUNK) as $chunk) {
+        $body_html = '<tbody>';
+        foreach ($chunk as $idx => $row) {
+            $style = $idx % 2 === 0 ? $td_style : $td_alt;
+            $body_html .= '<tr>' . implode('', array_map(function ($val) use ($style) {
+                $align = is_float($val) || is_int($val) ? 'text-align:right;' : '';
+                $display = is_float($val) ? number_format($val, 2) : htmlspecialchars((string)$val);
+                return "<td style=\"$style$align\">$display</td>";
+            }, $row)) . '</tr>';
+        }
+        $body_html .= '</tbody>';
+        $mpdf->WriteHTML("<table style='width:100%;border-collapse:collapse;'>$head_html$body_html</table>");
     }
-    $body_html .= '</tbody>';
 
-    $html = "
-        <h2 style='color:#1a3a5c;font-size:14px;margin-bottom:8px;'>" . htmlspecialchars($title) . "</h2>
-        <table style='width:100%;border-collapse:collapse;'>$head_html$body_html</table>
-        <p style='font-size:9px;color:#999;margin-top:8px;'>พิมพ์เมื่อ: " . date('d/m/Y H:i') . "</p>
-    ";
-
-    $mpdf->WriteHTML($html);
+    $mpdf->WriteHTML("<p style='font-size:9px;color:#999;margin-top:8px;'>พิมพ์เมื่อ: " . date('d/m/Y H:i') . "</p>");
     $mpdf->Output('report_' . date('Ymd') . '.pdf', 'D');
     exit;
 }
