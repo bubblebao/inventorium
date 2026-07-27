@@ -14,10 +14,13 @@ define('COMPANY_ADDRESS', '31/1 Moo 6 Choengthale Sub Dist Rd. Choengthale, Thal
 define('COMPANY_TEL',     '0-7631-7600');
 define('COMPANY_TAX_ID',  '0835546002941');
 
-// ── Large exports (all-time / no filter) can build multi-MB HTML/spreadsheets —
-//    raise limits that otherwise crash mid-generation (pcre.backtrack_limit, memory) ──
+// ── Large exports (all-time / no filter) can build multi-MB HTML/spreadsheets
+//    and take a while for mPDF to render row-by-row — raise limits that otherwise
+//    crash mid-generation (pcre.backtrack_limit, memory, execution time) ──
 @ini_set('pcre.backtrack_limit', '20000000');
 if ((int) ini_get('memory_limit') !== -1) { @ini_set('memory_limit', '512M'); }
+@ini_set('max_execution_time', '300');
+@set_time_limit(300);
 
 $format = $_GET['format'] ?? 'excel'; // excel | pdf
 $type   = $_GET['type']   ?? 'po_list'; // po_list | po_detail | vendor | dept_report
