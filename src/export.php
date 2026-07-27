@@ -875,17 +875,23 @@ function exportItemList(string $format): void
         foreach ($words as $w) {
             $e_ascii = db_escape($w);
             $e_tis   = db_search($w);
-            $where .= " AND (PrdId LIKE '%$e_ascii%' OR Barcode LIKE '%$e_ascii%' OR PrdDescE LIKE '%$e_tis%' OR PrdDescT LIKE '%$e_tis%' OR VndCode LIKE '%$e_ascii%')";
+            $where .= " AND (p.PrdId LIKE '%$e_ascii%' OR p.Barcode LIKE '%$e_ascii%' OR p.PrdDescE LIKE '%$e_tis%' OR p.PrdDescT LIKE '%$e_tis%' OR p.VndCode LIKE '%$e_ascii%')";
         }
     }
-    $where .= recv_range_clause('PrdId',    $prd_from, $prd_to);
-    $where .= recv_range_clause('CateCode', $cat_from, $cat_to);
+    $where .= recv_range_clause('p.PrdId',    $prd_from, $prd_to);
+    $where .= recv_range_clause('p.CateCode', $cat_from, $cat_to);
 
     $result = mysqli_query($conn, "
-        SELECT PrdId, Barcode, PrdDescE, PrdDescT, BaseUnit, LastCost, OnHand, Active
-        FROM gblprod
+        SELECT p.PrdId, p.Barcode, p.PrdDescE, p.PrdDescT, p.BaseUnit, p.LastCost, p.OnHand, p.Active,
+               lr.LastRecvDate
+        FROM gblprod p
+        LEFT JOIN (
+            SELECT d.PrdID, MAX(h.RecvDate) AS LastRecvDate
+            FROM invrecv1 d INNER JOIN invrecv0 h ON h.SeqNo = d.SeqNo
+            GROUP BY d.PrdID
+        ) lr ON lr.PrdID = p.PrdId
         WHERE $where
-        ORDER BY Active DESC, PrdId ASC
+        ORDER BY p.Active DESC, p.PrdId ASC
     ");
     $rows = [];
     while ($r = mysqli_fetch_assoc($result)) $rows[] = $r;
@@ -893,12 +899,13 @@ function exportItemList(string $format): void
     $title = 'รายการสินค้า — ' . fmt_date(date('Y-m-d'));
     if ($search !== '') $title .= ' (ค้นหา: ' . $search . ')';
 
-    $headers = ['รหัสสินค้า','Barcode','ชื่อ (EN)','ชื่อ (TH)','หน่วย','ทุนล่าสุด','คงเหลือ','สถานะ'];
+    $headers = ['รหัสสินค้า','Barcode','ชื่อ (EN)','ชื่อ (TH)','หน่วย','ทุนล่าสุด','คงเหลือ','สถานะ','วันรับล่าสุด'];
     $data = array_map(fn($r) => [
         $r['PrdId'], $r['Barcode'],
         db_str($r['PrdDescE']), db_str($r['PrdDescT']),
         $r['BaseUnit'], (float)$r['LastCost'], (float)$r['OnHand'],
         (int)$r['Active'] === 0 ? 'Inactive' : 'Active',
+        $r['LastRecvDate'] ? fmt_date($r['LastRecvDate']) : '-',
     ], $rows);
 
     if ($format === 'pdf') {
