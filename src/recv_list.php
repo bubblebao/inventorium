@@ -61,6 +61,7 @@ $result = mysqli_query($conn, "
 $r_vnd = mysqli_query($conn, "SELECT VndCode, VndName FROM gblvend ORDER BY VndCode");
 $r_loc = mysqli_query($conn, "SELECT DISTINCT LocaCode FROM invrecv0 WHERE LocaCode <> '' AND LocaCode IS NOT NULL ORDER BY LocaCode");
 $r_cat = mysqli_query($conn, "SELECT CateCode, PrdDescE FROM gblprod WHERE CateCode <> '' AND CateCode IS NOT NULL GROUP BY CateCode ORDER BY CateCode");
+$r_prd = mysqli_query($conn, "SELECT PrdId, PrdDescE FROM gblprod WHERE Active = 1 ORDER BY PrdId");
 
 // ── Export + link params ──
 $filter_params = recv_nonempty_params($p);
@@ -155,9 +156,9 @@ foreach (['vnd_from','vnd_to','loc_from','loc_to','cat_from','cat_to','prd_from'
       <div class="col-12 col-md-6 col-xl-3">
         <label class="form-label small fw-bold mb-1"><i class="bi bi-box-seam me-1 text-muted"></i><?= t('product_label') ?></label>
         <div class="d-flex gap-1">
-          <input type="text" name="prd_from" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($p['prd_from']) ?>" style="text-transform:uppercase">
+          <input type="text" name="prd_from" list="dl_prd" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($p['prd_from']) ?>" style="text-transform:uppercase">
           <span class="align-self-center text-muted small">→</span>
-          <input type="text" name="prd_to" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($p['prd_to']) ?>" style="text-transform:uppercase">
+          <input type="text" name="prd_to" list="dl_prd" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($p['prd_to']) ?>" style="text-transform:uppercase">
         </div>
       </div>
 
@@ -215,6 +216,7 @@ foreach (['vnd_from','vnd_to','loc_from','loc_to','cat_from','cat_to','prd_from'
 <datalist id="dl_vnd"><?php while ($v = mysqli_fetch_assoc($r_vnd)): ?><option value="<?= htmlspecialchars($v['VndCode']) ?>"><?= htmlspecialchars(db_str($v['VndName'])) ?></option><?php endwhile; ?></datalist>
 <datalist id="dl_loc"><?php while ($s = mysqli_fetch_assoc($r_loc)): ?><option value="<?= htmlspecialchars($s['LocaCode']) ?>"></option><?php endwhile; ?></datalist>
 <datalist id="dl_cat"><?php while ($c = mysqli_fetch_assoc($r_cat)): ?><option value="<?= htmlspecialchars($c['CateCode']) ?>"><?= htmlspecialchars(db_str($c['PrdDescE'])) ?></option><?php endwhile; ?></datalist>
+<datalist id="dl_prd"><?php while ($pr = mysqli_fetch_assoc($r_prd)): ?><option value="<?= htmlspecialchars($pr['PrdId']) ?>"><?= htmlspecialchars(db_str($pr['PrdDescE'])) ?></option><?php endwhile; ?></datalist>
 
 <!-- Results Card -->
 <div class="card">

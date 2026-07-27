@@ -489,6 +489,10 @@ $range_where  = recv_range_clause('PrdId',    $prd_from, $prd_to);
 $range_where .= recv_range_clause('CateCode', $cat_from, $cat_to);
 $active_filters = ($prd_from !== '' ? 1 : 0) + ($prd_to !== '' ? 1 : 0) + ($cat_from !== '' ? 1 : 0) + ($cat_to !== '' ? 1 : 0);
 
+// ── Datalist data (พิมพ์ค้นหาได้ — ไม่ผูกกับผลค้นหาปัจจุบัน) ──
+$r_prd_dl = mysqli_query($conn, "SELECT PrdId, PrdDescE FROM gblprod WHERE Active = 1 ORDER BY PrdId");
+$r_cat_dl = mysqli_query($conn, "SELECT CateCode, PrdDescE FROM gblprod WHERE CateCode <> '' AND CateCode IS NOT NULL GROUP BY CateCode ORDER BY CateCode");
+
 if ($search === '') {
     // Default: แสดงสินค้าทั้งหมดเรียงตาม PrdId (Active ขึ้นก่อน)
     $is_default = true;
@@ -552,9 +556,9 @@ require_once __DIR__ . '/includes/header.php';
       <div class="col-12 col-md-6 col-xl-4">
         <label class="form-label small fw-bold mb-1"><i class="bi bi-upc-scan me-1 text-muted"></i><?= t('item_code') ?></label>
         <div class="d-flex gap-1">
-          <input type="text" name="prd_from" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($prd_from) ?>" style="text-transform:uppercase">
+          <input type="text" name="prd_from" list="dl_prd" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($prd_from) ?>" style="text-transform:uppercase">
           <span class="align-self-center text-muted small">→</span>
-          <input type="text" name="prd_to" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($prd_to) ?>" style="text-transform:uppercase">
+          <input type="text" name="prd_to" list="dl_prd" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($prd_to) ?>" style="text-transform:uppercase">
         </div>
       </div>
 
@@ -562,9 +566,9 @@ require_once __DIR__ . '/includes/header.php';
       <div class="col-12 col-md-6 col-xl-4">
         <label class="form-label small fw-bold mb-1"><i class="bi bi-tags me-1 text-muted"></i><?= t('category') ?></label>
         <div class="d-flex gap-1">
-          <input type="text" name="cat_from" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($cat_from) ?>" style="text-transform:uppercase">
+          <input type="text" name="cat_from" list="dl_cat" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($cat_from) ?>" style="text-transform:uppercase">
           <span class="align-self-center text-muted small">→</span>
-          <input type="text" name="cat_to" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($cat_to) ?>" style="text-transform:uppercase">
+          <input type="text" name="cat_to" list="dl_cat" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($cat_to) ?>" style="text-transform:uppercase">
         </div>
       </div>
 
@@ -576,6 +580,10 @@ require_once __DIR__ . '/includes/header.php';
     </form>
   </div>
 </div>
+
+<!-- Datalists -->
+<datalist id="dl_prd"><?php while ($pr = mysqli_fetch_assoc($r_prd_dl)): ?><option value="<?= htmlspecialchars($pr['PrdId']) ?>"><?= htmlspecialchars(db_str($pr['PrdDescE'])) ?></option><?php endwhile; ?></datalist>
+<datalist id="dl_cat"><?php while ($c = mysqli_fetch_assoc($r_cat_dl)): ?><option value="<?= htmlspecialchars($c['CateCode']) ?>"><?= htmlspecialchars(db_str($c['PrdDescE'])) ?></option><?php endwhile; ?></datalist>
 
 <?php
 $result_count = $results ? mysqli_num_rows($results) : 0;

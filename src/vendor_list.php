@@ -30,6 +30,9 @@ $result = mysqli_query($conn, "
     ORDER BY VndName
 ");
 
+// ── Datalist data (พิมพ์ค้นหาได้ — ไม่ผูกกับผลค้นหาปัจจุบัน) ──
+$r_vnd_dl = mysqli_query($conn, "SELECT VndCode, VndName FROM gblvend ORDER BY VndCode");
+
 require_once __DIR__ . '/includes/header.php';
 ?>
 
@@ -51,9 +54,9 @@ require_once __DIR__ . '/includes/header.php';
       <div class="col-12 col-md-6 col-xl-4">
         <label class="form-label small fw-bold mb-1"><i class="bi bi-upc me-1 text-muted"></i><?= t('vendor_code') ?></label>
         <div class="d-flex gap-1">
-          <input type="text" name="vnd_from" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($vnd_from) ?>" style="text-transform:uppercase">
+          <input type="text" name="vnd_from" list="dl_vnd" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($vnd_from) ?>" style="text-transform:uppercase">
           <span class="align-self-center text-muted small">→</span>
-          <input type="text" name="vnd_to" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($vnd_to) ?>" style="text-transform:uppercase">
+          <input type="text" name="vnd_to" list="dl_vnd" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($vnd_to) ?>" style="text-transform:uppercase">
         </div>
       </div>
 
@@ -75,6 +78,9 @@ require_once __DIR__ . '/includes/header.php';
     </form>
   </div>
 </div>
+
+<!-- Datalists -->
+<datalist id="dl_vnd"><?php while ($v = mysqli_fetch_assoc($r_vnd_dl)): ?><option value="<?= htmlspecialchars($v['VndCode']) ?>"><?= htmlspecialchars(db_str($v['VndName'])) ?></option><?php endwhile; ?></datalist>
 
 <div class="card">
   <div class="card-header-inv d-flex align-items-center justify-content-between">
