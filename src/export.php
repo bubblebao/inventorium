@@ -588,27 +588,37 @@ function exportRecvList(string $format): void
 
     $year = (int)date('Y');
     $p     = recv_collect_params("$year-01-01", "$year-12-31");
-    $where = recv_where_from_params($p);
+    $where = recv_line_where_from_params($p);
     $date_from = $p['date_from'];
     $date_to   = $p['date_to'];
 
     $result = mysqli_query($conn, "
         SELECT h.RecvDate, h.RecvNo, h.RefNo, h.PoNo, h.VndCode, v.VndName,
-               h.InvType, h.LocaCode, h.CreateUser, h.Remark,
-               (SELECT SUM(Amount) FROM invrecv1 WHERE SeqNo = h.SeqNo) AS TAmt
+               h.InvType, h.LocaCode, h.CreateUser,
+               d.DtlNo, d.PrdID, d.Remark AS ItemRemark, d.Qty, d.Unit, d.Cost,
+               d.NetAmount, d.TaxAmt, d.Amount,
+               p.PrdDescE, p.PrdDescT, p.CateCode, p.SubCatCode
         FROM invrecv0 h
+        INNER JOIN invrecv1 d ON d.SeqNo = h.SeqNo
+        LEFT JOIN gblprod p ON p.PrdId = d.PrdID
         LEFT JOIN gblvend v ON h.VndCode = v.VndCode
         WHERE $where
-        ORDER BY h.RecvDate DESC, h.SeqNo DESC
+        ORDER BY h.RecvDate DESC, h.SeqNo DESC, d.DtlNo ASC
     ");
 
     $rows = [];
     while ($r = mysqli_fetch_assoc($result)) $rows[] = $r;
 
     $typeLabel = fn($t) => $t === 'I' ? 'Inventory' : ($t === 'D' ? 'Direct' : (string)$t);
+    $descFor = function($r) {
+        $d = trim(db_str($r['ItemRemark'] ?? ''));
+        if ($d === '' || strcasecmp($d, 'NULL') === 0) $d = trim(db_str($r['PrdDescT'] ?? ''));
+        if ($d === '' || strcasecmp($d, 'NULL') === 0) $d = trim(db_str($r['PrdDescE'] ?? ''));
+        return $d ?: '—';
+    };
 
     $title   = 'Receiving List ' . fmt_date($date_from) . ' - ' . fmt_date($date_to);
-    $headers = ['วันที่รับ','เลขที่รับ','PO No','Ref','รหัส Vendor','ชื่อ Vendor','ประเภท','Location','ยอดรวม','ผู้บันทึก','หมายเหตุ'];
+    $headers = ['วันที่รับ','เลขที่รับ','PO No','Ref','รหัส Vendor','ชื่อ Vendor','ลำดับ','รหัสสินค้า','รายการสินค้า','หมวด','หมวดหมู่ย่อย','จำนวน','หน่วย','ทุน/หน่วย','ก่อนภาษี','ภาษี','ยอดรายการ','ประเภท','Location','ผู้บันทึก'];
     $data = array_map(fn($r) => [
         fmt_date($r['RecvDate']),
         $r['RecvNo'],
@@ -616,15 +626,24 @@ function exportRecvList(string $format): void
         $r['RefNo'],
         $r['VndCode'],
         db_str($r['VndName']),
+        $r['DtlNo'],
+        $r['PrdID'],
+        $descFor($r),
+        $r['CateCode'],
+        $r['SubCatCode'],
+        (float)$r['Qty'],
+        $r['Unit'],
+        (float)$r['Cost'],
+        (float)$r['NetAmount'],
+        (float)$r['TaxAmt'],
+        (float)$r['Amount'],
         $typeLabel($r['InvType']),
         $r['LocaCode'],
-        (float)$r['TAmt'],
         db_str($r['CreateUser']),
-        db_str($r['Remark']),
     ], $rows);
 
     if ($format === 'pdf') {
-        outputPdf($title, $headers, $data, 'A4-L');
+        outputPdf($title, $headers, $data, 'A3-L');
     } else {
         outputExcel($title, $headers, $data, 'recv_list_' . date('Ymd'));
     }

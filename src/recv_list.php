@@ -21,7 +21,7 @@ $year_max = $range['max'];
 
 // ── Filters (ช่วง From/To ทุกช่อง) ──
 $p = recv_collect_params("$year_max-01-01", "$year_max-12-31");
-$where = recv_where_from_params($p);
+$where = recv_line_where_from_params($p);
 $page  = max(1, (int)($_GET['page'] ?? 1));
 
 // Active year detection (ไฮไลต์ปุ่ม) — เฉพาะตอนไม่มี filter ช่วงอื่น
@@ -32,14 +32,21 @@ if (preg_match('/^(\d{4})-01-01$/', $p['date_from'], $mf) && preg_match('/^(\d{4
 $is_all_time = ($p['date_from'] === "$year_min-01-01" && $p['date_to'] === "$year_max-12-31");
 
 // ── Sort whitelist (กัน SQL injection) ──
-$sort_map = ['RecvDate' => 'h.RecvDate', 'TAmt' => 'TAmt',
-             'VndName'  => 'v.VndName',  'RecvNo' => 'h.RecvNo'];
+$sort_map = ['RecvDate' => 'h.RecvDate', 'Amount' => 'd.Amount',
+             'VndName'  => 'v.VndName',  'RecvNo' => 'h.RecvNo',
+             'PrdID'    => 'd.PrdID',    'Qty' => 'd.Qty'];
 $sort_key = isset($_GET['sort']) && array_key_exists($_GET['sort'], $sort_map) ? $_GET['sort'] : 'RecvDate';
 $sort_dir = isset($_GET['dir'])  && strtoupper($_GET['dir']) === 'ASC' ? 'ASC' : 'DESC';
-$order_by = $sort_map[$sort_key] . ' ' . $sort_dir . ', h.SeqNo DESC';
+$order_by = $sort_map[$sort_key] . ' ' . $sort_dir . ', h.SeqNo DESC, d.DtlNo ASC';
 
 // ── Count ──
-$r_count    = mysqli_query($conn, "SELECT COUNT(*) AS total FROM invrecv0 h WHERE $where");
+$r_count    = mysqli_query($conn, "
+    SELECT COUNT(*) AS total
+    FROM invrecv0 h
+    INNER JOIN invrecv1 d ON d.SeqNo = h.SeqNo
+    LEFT JOIN gblprod p ON p.PrdId = d.PrdID
+    WHERE $where
+");
 $total_rows = (int)(($r_count ? mysqli_fetch_assoc($r_count) : null)['total'] ?? 0);
 $total_pages = max(1, (int)ceil($total_rows / PER_PAGE));
 $page       = min($page, $total_pages);
@@ -48,9 +55,13 @@ $offset     = ($page - 1) * PER_PAGE;
 // ── Main query ──
 $result = mysqli_query($conn, "
     SELECT h.SeqNo, h.RecvDate, h.RecvNo, h.RefNo, h.PoNo, h.VndCode, v.VndName,
-           (SELECT SUM(Amount) FROM invrecv1 WHERE SeqNo = h.SeqNo) AS TAmt,
-           h.LocaCode, h.InvType, h.CreateUser, h.Remark
+           h.LocaCode, h.InvType, h.CreateUser,
+           d.DtlNo, d.PrdID, d.Remark AS ItemRemark, d.Qty, d.Unit, d.Cost,
+           d.NetAmount, d.TaxAmt, d.Amount,
+           p.PrdDescE, p.PrdDescT, p.CateCode, p.SubCatCode
     FROM invrecv0 h
+    INNER JOIN invrecv1 d ON d.SeqNo = h.SeqNo
+    LEFT JOIN gblprod p ON p.PrdId = d.PrdID
     LEFT JOIN gblvend v ON h.VndCode = v.VndCode
     WHERE $where
     ORDER BY $order_by
@@ -276,16 +287,19 @@ foreach (['vnd_from','vnd_to','loc_from','loc_to','cat_from','cat_to','subcat_fr
             <?= sort_th('RecvNo',   t('col_recv_no'),  $sort_key, $sort_dir, $base_params) ?>
             <th class="d-none d-xl-table-cell"><?= t('col_po_ref') ?></th>
             <?= sort_th('VndName',  t('col_vendor'),   $sort_key, $sort_dir, $base_params) ?>
-            <th><?= t('recv_type') ?></th>
-            <?= sort_th('TAmt',     t('col_total'),    $sort_key, $sort_dir, $base_params) ?>
+            <?= sort_th('PrdID',    t('col_prdid'),    $sort_key, $sort_dir, $base_params) ?>
+            <?= sort_th('Qty',      t('col_qty'),      $sort_key, $sort_dir, $base_params) ?>
+            <th><?= t('col_unit') ?></th>
+            <th class="text-end d-none d-xl-table-cell"><?= t('col_cost_unit') ?></th>
+            <?= sort_th('Amount',   t('col_amount_incl'), $sort_key, $sort_dir, $base_params) ?>
+            <th class="d-none d-xl-table-cell"><?= t('recv_type') ?></th>
             <th class="d-none d-lg-table-cell"><?= t('col_loc') ?></th>
-            <th class="d-none d-xl-table-cell"><?= t('recorded_by') ?></th>
             <th data-nofilter></th>
           </tr>
         </thead>
         <tbody>
         <?php if (!$result || mysqli_num_rows($result) === 0): ?>
-          <tr class="inv-no-filter"><td colspan="9" class="text-center text-muted py-4"><?= t('no_data') ?></td></tr>
+          <tr class="inv-no-filter"><td colspan="12" class="text-center text-muted py-4"><?= t('no_data') ?></td></tr>
         <?php else: ?>
           <?php while ($row = mysqli_fetch_assoc($result)): ?>
           <tr style="cursor:pointer"
@@ -301,13 +315,25 @@ foreach (['vnd_from','vnd_to','loc_from','loc_to','cat_from','cat_to','subcat_fr
               <small style="color:var(--muted)"><?= htmlspecialchars($row['VndCode']) ?></small>
               <div class="d-lg-none" style="font-size:10.5px;color:var(--muted);margin-top:2px">
                 <span class="badge-inv badge-src" style="font-size:9px;padding:1px 6px"><?= htmlspecialchars($row['LocaCode']) ?></span>
-                <?php if (!empty($row['CreateUser'])): ?> · <?= htmlspecialchars(db_str($row['CreateUser'])) ?><?php endif; ?>
+                <?= recv_type_badge($row['InvType']) ?>
               </div>
             </td>
-            <td><?= recv_type_badge($row['InvType']) ?></td>
-            <td class="text-end fw-semibold"><?= fmt_number($row['TAmt']) ?></td>
+            <td>
+              <?php
+                $item_desc = trim(db_str($row['ItemRemark'] ?? ''));
+                if ($item_desc === '' || strcasecmp($item_desc, 'NULL') === 0) $item_desc = trim(db_str($row['PrdDescT'] ?? ''));
+                if ($item_desc === '' || strcasecmp($item_desc, 'NULL') === 0) $item_desc = trim(db_str($row['PrdDescE'] ?? ''));
+              ?>
+              <div><code style="font-size:11px"><?= htmlspecialchars($row['PrdID']) ?></code></div>
+              <div style="font-size:12px;min-width:190px"><?= htmlspecialchars($item_desc ?: '—') ?></div>
+              <small style="color:var(--muted)"><?= htmlspecialchars($row['CateCode']) ?><?= $row['SubCatCode'] ? ' / ' . htmlspecialchars($row['SubCatCode']) : '' ?></small>
+            </td>
+            <td class="text-end"><?= fmt_number($row['Qty']) ?></td>
+            <td><?= htmlspecialchars($row['Unit']) ?></td>
+            <td class="text-end d-none d-xl-table-cell"><?= fmt_number($row['Cost']) ?></td>
+            <td class="text-end fw-semibold"><?= fmt_number($row['Amount']) ?></td>
+            <td class="d-none d-xl-table-cell"><?= recv_type_badge($row['InvType']) ?></td>
             <td class="d-none d-lg-table-cell"><span class="badge-inv badge-src"><?= htmlspecialchars($row['LocaCode']) ?></span></td>
-            <td class="d-none d-xl-table-cell" style="font-size:11.5px;color:var(--muted)"><?= htmlspecialchars(db_str($row['CreateUser'])) ?></td>
             <td>
               <a href="/recv_detail.php?seq=<?= (int)$row['SeqNo'] ?>"
                  class="btn btn-sm" style="border:1px solid var(--accent);color:var(--accent);border-radius:6px" data-loading>

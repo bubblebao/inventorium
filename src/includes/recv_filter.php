@@ -75,6 +75,22 @@ function recv_where_from_params(array $p): string {
     return $w;
 }
 
+// สร้าง WHERE สำหรับรายงานระดับรายการสินค้า
+// ต้องใช้คู่กับ alias: invrecv0 h, invrecv1 d, gblprod p
+// การกรองสินค้า/หมวดจะจำกัดแถวสินค้าโดยตรง จึงไม่ดึงสินค้าอื่นในใบรับเดียวกันติดมาด้วย
+function recv_line_where_from_params(array $p): string {
+    $w  = "h.RecvDate BETWEEN '" . db_escape($p['date_from']) . "' AND '" . db_escape($p['date_to']) . "'";
+    $w .= recv_range_clause('h.VndCode',  $p['vnd_from'], $p['vnd_to']);
+    $w .= recv_range_clause('h.LocaCode', $p['loc_from'], $p['loc_to']);
+    $w .= recv_range_clause('h.RefNo',    $p['ref_from'], $p['ref_to']);
+    $w .= recv_range_clause('d.PrdID',    $p['prd_from'], $p['prd_to']);
+    $w .= recv_range_clause('p.CateCode', $p['cat_from'], $p['cat_to']);
+    $w .= recv_range_clause('p.SubCatCode', $p['subcat_from'], $p['subcat_to']);
+    if ($p['inv_type'] !== '') $w .= " AND h.InvType = '" . db_escape($p['inv_type']) . "'";
+
+    return $w;
+}
+
 // params ที่ไม่ว่าง — สำหรับ query string (export/pagination/sort links)
 function recv_nonempty_params(array $p): array {
     return array_filter($p, fn($v) => $v !== '');
