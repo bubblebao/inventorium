@@ -73,14 +73,13 @@ $r_cat = mysqli_query($conn, "
     WHERE p.CateCode <> '' AND p.CateCode IS NOT NULL
     ORDER BY p.CateCode
 ");
-$lookup_join = $has_lookups ? "LEFT JOIN lookups l ON l.TbName = 'SCAT' AND l.TbKey = p.SubCatCode" : '';
-$r_subcat = mysqli_query($conn, "
-    SELECT DISTINCT p.SubCatCode, p.CateCode, $lookup_name AS SubCatName
-    FROM gblprod p
-    $lookup_join
-    WHERE p.SubCatCode <> '' AND p.SubCatCode IS NOT NULL
-    ORDER BY p.SubCatCode
-");
+if ($has_lookups) {
+    // SCAT.TbVal2 is the authoritative parent Category. Product data contains
+    // legacy category mismatches, so do not infer the parent from gblprod.
+    $r_subcat = mysqli_query($conn, "SELECT TbKey AS SubCatCode, UPPER(TbVal2) AS CateCode, TbVal1 AS SubCatName FROM lookups WHERE TbName = 'SCAT' AND TbKey <> '' AND TbVal2 <> '' AND TbVal2 IS NOT NULL ORDER BY TbKey");
+} else {
+    $r_subcat = mysqli_query($conn, "SELECT DISTINCT SubCatCode, CateCode, '' AS SubCatName FROM gblprod WHERE SubCatCode <> '' AND SubCatCode IS NOT NULL ORDER BY SubCatCode");
+}
 $r_prd = mysqli_query($conn, "SELECT PrdId, PrdDescE FROM gblprod WHERE Active = 1 ORDER BY PrdId");
 
 // ── Export + link params ──

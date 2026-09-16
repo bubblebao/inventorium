@@ -499,8 +499,12 @@ $has_lookups = $r_lookup_table && mysqli_num_rows($r_lookup_table) > 0;
 $lookup_name = $has_lookups ? 'l.TbVal1' : "''";
 $lookup_join = $has_lookups ? "LEFT JOIN lookups l ON l.TbName = 'CATE' AND l.TbKey = p.CateCode" : '';
 $r_cat_dl = mysqli_query($conn, "SELECT DISTINCT p.CateCode, $lookup_name AS CateName FROM gblprod p $lookup_join WHERE p.CateCode <> '' AND p.CateCode IS NOT NULL ORDER BY p.CateCode");
-$lookup_join = $has_lookups ? "LEFT JOIN lookups l ON l.TbName = 'SCAT' AND l.TbKey = p.SubCatCode" : '';
-$r_subcat_dl = mysqli_query($conn, "SELECT DISTINCT p.SubCatCode, p.CateCode, $lookup_name AS SubCatName FROM gblprod p $lookup_join WHERE p.SubCatCode <> '' AND p.SubCatCode IS NOT NULL ORDER BY p.SubCatCode");
+if ($has_lookups) {
+    // SCAT.TbVal2 is the authoritative parent Category; product data has legacy mismatches.
+    $r_subcat_dl = mysqli_query($conn, "SELECT TbKey AS SubCatCode, UPPER(TbVal2) AS CateCode, TbVal1 AS SubCatName FROM lookups WHERE TbName = 'SCAT' AND TbKey <> '' AND TbVal2 <> '' AND TbVal2 IS NOT NULL ORDER BY TbKey");
+} else {
+    $r_subcat_dl = mysqli_query($conn, "SELECT DISTINCT SubCatCode, CateCode, '' AS SubCatName FROM gblprod WHERE SubCatCode <> '' AND SubCatCode IS NOT NULL ORDER BY SubCatCode");
+}
 
 if ($search === '') {
     // Default: แสดงสินค้าทั้งหมดเรียงตาม PrdId (Active ขึ้นก่อน)
