@@ -249,6 +249,69 @@ document.querySelectorAll('[data-loading]').forEach(function(el) {
     });
 });
 
+// Category / Subcategory dependency: show only subcategories that belong to
+// the selected Category. A single Category is an exact match; From + To is a
+// code range, so GL → OE shows GL, GS and OE subcategories.
+(function() {
+  var initializedDatalists = [];
+  document.querySelectorAll('[data-subcategory-filter]').forEach(function(subcategory) {
+    var form = subcategory.form;
+    if (!form) return;
+    var categoryFrom = form.querySelector('[data-category-from]');
+    var categoryTo = form.querySelector('[data-category-to]');
+    if (!categoryFrom) return;
+
+    var list = subcategory.list;
+    if (list && initializedDatalists.indexOf(list) !== -1) return;
+    if (list) initializedDatalists.push(list);
+    var allOptions = list ? Array.prototype.slice.call(list.options).map(function(option) {
+      return { value: option.value, label: option.textContent, category: option.getAttribute('data-category') || '' };
+    }) : null;
+
+    function code(input) {
+      return input ? String(input.value || '').trim().toUpperCase() : '';
+    }
+    function allowed(category) {
+      var from = code(categoryFrom);
+      var to = code(categoryTo);
+      if (!from && !to) return true;
+      if (from && to) return category >= from && category <= to;
+      if (from) return category === from;
+      return category <= to;
+    }
+    function updateDatalist() {
+      if (!list || !allOptions) return;
+      list.textContent = '';
+      allOptions.filter(function(option) { return allowed(option.category); }).forEach(function(option) {
+        var el = document.createElement('option');
+        el.value = option.value;
+        el.textContent = option.label;
+        el.setAttribute('data-category', option.category);
+        list.appendChild(el);
+      });
+    }
+    function updateSelect() {
+      if (subcategory.tagName !== 'SELECT') return;
+      Array.prototype.slice.call(subcategory.options).forEach(function(option) {
+        if (!option.value) return;
+        var show = allowed((option.getAttribute('data-category') || '').toUpperCase());
+        option.hidden = !show;
+        option.disabled = !show;
+        if (!show && option.selected) subcategory.value = '';
+      });
+    }
+    function update() {
+      updateDatalist();
+      updateSelect();
+    }
+    ['input', 'change'].forEach(function(eventName) {
+      categoryFrom.addEventListener(eventName, update);
+      if (categoryTo) categoryTo.addEventListener(eventName, update);
+    });
+    update();
+  });
+})();
+
 // Global search: prefix "V:" redirects to vendor_list
 var globalSearch = document.getElementById('globalSearch');
 var globalSearchForm = document.getElementById('globalSearchForm');

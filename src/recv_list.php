@@ -196,9 +196,9 @@ foreach (['vnd_from','vnd_to','loc_from','loc_to','cat_from','cat_to','subcat_fr
       <div class="col-12 col-md-6 col-xl-3">
         <label class="form-label small fw-bold mb-1"><i class="bi bi-tags me-1 text-muted"></i><?= t('category') ?></label>
         <div class="d-flex gap-1">
-          <input type="text" name="cat_from" list="dl_cat" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($p['cat_from']) ?>" style="text-transform:uppercase">
+          <input type="text" name="cat_from" list="dl_cat" data-category-from class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($p['cat_from']) ?>" style="text-transform:uppercase">
           <span class="align-self-center text-muted small">→</span>
-          <input type="text" name="cat_to" list="dl_cat" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($p['cat_to']) ?>" style="text-transform:uppercase">
+          <input type="text" name="cat_to" list="dl_cat" data-category-to class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($p['cat_to']) ?>" style="text-transform:uppercase">
         </div>
       </div>
 
@@ -206,9 +206,9 @@ foreach (['vnd_from','vnd_to','loc_from','loc_to','cat_from','cat_to','subcat_fr
       <div class="col-12 col-md-6 col-xl-3">
         <label class="form-label small fw-bold mb-1"><i class="bi bi-tags me-1 text-muted"></i><?= t('subcategory') ?></label>
         <div class="d-flex gap-1">
-          <input type="text" name="subcat_from" list="dl_subcat" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($p['subcat_from']) ?>" style="text-transform:uppercase">
+          <input type="text" name="subcat_from" list="dl_subcat" data-subcategory-filter class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($p['subcat_from']) ?>" style="text-transform:uppercase">
           <span class="align-self-center text-muted small">→</span>
-          <input type="text" name="subcat_to" list="dl_subcat" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($p['subcat_to']) ?>" style="text-transform:uppercase">
+          <input type="text" name="subcat_to" list="dl_subcat" data-subcategory-filter class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($p['subcat_to']) ?>" style="text-transform:uppercase">
         </div>
       </div>
 
@@ -246,7 +246,7 @@ foreach (['vnd_from','vnd_to','loc_from','loc_to','cat_from','cat_to','subcat_fr
 <datalist id="dl_vnd"><?php while ($v = mysqli_fetch_assoc($r_vnd)): ?><option value="<?= htmlspecialchars($v['VndCode']) ?>"><?= htmlspecialchars(db_str($v['VndName'])) ?></option><?php endwhile; ?></datalist>
 <datalist id="dl_loc"><?php while ($s = mysqli_fetch_assoc($r_loc)): ?><option value="<?= htmlspecialchars($s['LocaCode']) ?>"></option><?php endwhile; ?></datalist>
 <datalist id="dl_cat"><?php while ($c = mysqli_fetch_assoc($r_cat)): ?><option value="<?= htmlspecialchars($c['CateCode']) ?>"><?= htmlspecialchars(db_str($c['CateName'])) ?></option><?php endwhile; ?></datalist>
-<datalist id="dl_subcat"><?php while ($s = mysqli_fetch_assoc($r_subcat)): ?><option value="<?= htmlspecialchars($s['SubCatCode']) ?>"><?= htmlspecialchars(db_str($s['SubCatName']) ?: $s['CateCode']) ?></option><?php endwhile; ?></datalist>
+<datalist id="dl_subcat"><?php while ($s = mysqli_fetch_assoc($r_subcat)): ?><option value="<?= htmlspecialchars($s['SubCatCode']) ?>" data-category="<?= htmlspecialchars($s['CateCode']) ?>"><?= htmlspecialchars(db_str($s['SubCatName']) ?: $s['CateCode']) ?></option><?php endwhile; ?></datalist>
 <datalist id="dl_prd"><?php while ($pr = mysqli_fetch_assoc($r_prd)): ?><option value="<?= htmlspecialchars($pr['PrdId']) ?>"><?= htmlspecialchars(db_str($pr['PrdDescE'])) ?></option><?php endwhile; ?></datalist>
 
 <!-- Results Card -->

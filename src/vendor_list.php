@@ -100,7 +100,7 @@ require_once __DIR__ . '/includes/header.php';
 
       <div class="col-12 col-md-6 col-xl-4">
         <label class="form-label small fw-bold mb-1"><i class="bi bi-tags me-1 text-muted"></i><?= t('category') ?> (<?= $GLOBALS['LANG'] === 'th' ? 'สินค้าที่เคยซื้อ' : 'Purchased products' ?>)</label>
-        <select name="cat_from" class="form-select form-select-sm">
+        <select name="cat_from" data-category-from class="form-select form-select-sm">
           <option value="">— <?= t('all') ?> —</option>
           <?php while ($c = mysqli_fetch_assoc($r_cat)): ?>
             <option value="<?= htmlspecialchars($c['CateCode']) ?>" <?= $cat_from === $c['CateCode'] ? 'selected' : '' ?>><?= htmlspecialchars($c['CateCode']) ?> — <?= htmlspecialchars(db_str($c['CateName'])) ?></option>
@@ -110,10 +110,10 @@ require_once __DIR__ . '/includes/header.php';
 
       <div class="col-12 col-md-6 col-xl-4">
         <label class="form-label small fw-bold mb-1"><i class="bi bi-tags me-1 text-muted"></i><?= t('subcategory') ?> (<?= $GLOBALS['LANG'] === 'th' ? 'สินค้าที่เคยซื้อ' : 'Purchased products' ?>)</label>
-        <select name="subcat_from" class="form-select form-select-sm">
+        <select name="subcat_from" data-subcategory-filter class="form-select form-select-sm">
           <option value="">— <?= t('all') ?> —</option>
           <?php while ($s = mysqli_fetch_assoc($r_subcat)): ?>
-            <option value="<?= htmlspecialchars($s['SubCatCode']) ?>" <?= $subcat_from === $s['SubCatCode'] ? 'selected' : '' ?>><?= htmlspecialchars($s['SubCatCode']) ?> — <?= htmlspecialchars(db_str($s['SubCatName']) ?: $s['CateCode']) ?></option>
+            <option value="<?= htmlspecialchars($s['SubCatCode']) ?>" data-category="<?= htmlspecialchars($s['CateCode']) ?>" <?= $subcat_from === $s['SubCatCode'] ? 'selected' : '' ?>><?= htmlspecialchars($s['SubCatCode']) ?> — <?= htmlspecialchars(db_str($s['SubCatName']) ?: $s['CateCode']) ?></option>
           <?php endwhile; ?>
         </select>
       </div>

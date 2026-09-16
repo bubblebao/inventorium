@@ -575,9 +575,9 @@ require_once __DIR__ . '/includes/header.php';
       <div class="col-12 col-md-6 col-xl-4">
         <label class="form-label small fw-bold mb-1"><i class="bi bi-tags me-1 text-muted"></i><?= t('category') ?></label>
         <div class="d-flex gap-1">
-          <input type="text" name="cat_from" list="dl_cat" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($cat_from) ?>" style="text-transform:uppercase">
+          <input type="text" name="cat_from" list="dl_cat" data-category-from class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($cat_from) ?>" style="text-transform:uppercase">
           <span class="align-self-center text-muted small">→</span>
-          <input type="text" name="cat_to" list="dl_cat" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($cat_to) ?>" style="text-transform:uppercase">
+          <input type="text" name="cat_to" list="dl_cat" data-category-to class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($cat_to) ?>" style="text-transform:uppercase">
         </div>
       </div>
 
@@ -585,9 +585,9 @@ require_once __DIR__ . '/includes/header.php';
       <div class="col-12 col-md-6 col-xl-4">
         <label class="form-label small fw-bold mb-1"><i class="bi bi-tags me-1 text-muted"></i><?= t('subcategory') ?></label>
         <div class="d-flex gap-1">
-          <input type="text" name="subcat_from" list="dl_subcat" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($subcat_from) ?>" style="text-transform:uppercase">
+          <input type="text" name="subcat_from" list="dl_subcat" data-subcategory-filter class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($subcat_from) ?>" style="text-transform:uppercase">
           <span class="align-self-center text-muted small">→</span>
-          <input type="text" name="subcat_to" list="dl_subcat" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($subcat_to) ?>" style="text-transform:uppercase">
+          <input type="text" name="subcat_to" list="dl_subcat" data-subcategory-filter class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($subcat_to) ?>" style="text-transform:uppercase">
         </div>
       </div>
 
@@ -603,7 +603,7 @@ require_once __DIR__ . '/includes/header.php';
 <!-- Datalists -->
 <datalist id="dl_prd"><?php while ($pr = mysqli_fetch_assoc($r_prd_dl)): ?><option value="<?= htmlspecialchars($pr['PrdId']) ?>"><?= htmlspecialchars(db_str($pr['PrdDescE'])) ?></option><?php endwhile; ?></datalist>
 <datalist id="dl_cat"><?php while ($c = mysqli_fetch_assoc($r_cat_dl)): ?><option value="<?= htmlspecialchars($c['CateCode']) ?>"><?= htmlspecialchars(db_str($c['CateName'])) ?></option><?php endwhile; ?></datalist>
-<datalist id="dl_subcat"><?php while ($s = mysqli_fetch_assoc($r_subcat_dl)): ?><option value="<?= htmlspecialchars($s['SubCatCode']) ?>"><?= htmlspecialchars(db_str($s['SubCatName']) ?: $s['CateCode']) ?></option><?php endwhile; ?></datalist>
+<datalist id="dl_subcat"><?php while ($s = mysqli_fetch_assoc($r_subcat_dl)): ?><option value="<?= htmlspecialchars($s['SubCatCode']) ?>" data-category="<?= htmlspecialchars($s['CateCode']) ?>"><?= htmlspecialchars(db_str($s['SubCatName']) ?: $s['CateCode']) ?></option><?php endwhile; ?></datalist>
 
 <?php
 $result_count = $results ? mysqli_num_rows($results) : 0;

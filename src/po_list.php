@@ -207,7 +207,7 @@ function sort_th(string $col, string $label, string $cur_sort, string $cur_dir, 
       </div>
       <div class="col-md-4">
         <label class="form-label small fw-bold"><?= t('category') ?></label>
-        <select name="cat_from" class="form-select form-select-sm">
+        <select name="cat_from" data-category-from class="form-select form-select-sm">
           <option value="">— <?= t('all') ?> —</option>
           <?php while ($c = mysqli_fetch_assoc($r_cat)): ?>
             <option value="<?= htmlspecialchars($c['CateCode']) ?>" <?= $cat_from === $c['CateCode'] ? 'selected' : '' ?>>
@@ -218,10 +218,10 @@ function sort_th(string $col, string $label, string $cur_sort, string $cur_dir, 
       </div>
       <div class="col-md-5">
         <label class="form-label small fw-bold"><?= t('subcategory') ?></label>
-        <select name="subcat_from" class="form-select form-select-sm">
+        <select name="subcat_from" data-subcategory-filter class="form-select form-select-sm">
           <option value="">— <?= t('all') ?> —</option>
           <?php while ($s = mysqli_fetch_assoc($r_subcat)): ?>
-            <option value="<?= htmlspecialchars($s['SubCatCode']) ?>" <?= $subcat_from === $s['SubCatCode'] ? 'selected' : '' ?>>
+            <option value="<?= htmlspecialchars($s['SubCatCode']) ?>" data-category="<?= htmlspecialchars($s['CateCode']) ?>" <?= $subcat_from === $s['SubCatCode'] ? 'selected' : '' ?>>
               <?= htmlspecialchars($s['SubCatCode']) ?> — <?= htmlspecialchars(db_str($s['SubCatName']) ?: $s['CateCode']) ?>
             </option>
           <?php endwhile; ?>
