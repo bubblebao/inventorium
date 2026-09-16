@@ -471,6 +471,7 @@ function exportVendor(string $format): void
     $subcat_from = strtoupper(trim($_GET['subcat_from'] ?? ''));
 
     $where = '1=1';
+    $product_vendor_join = '';
     if ($search !== '') {
         $s_ascii = db_escape($search);
         $s_tis   = db_search($search);
@@ -491,13 +492,15 @@ function exportVendor(string $format): void
     $subcat_where = recv_range_inner('p.SubCatCode', $subcat_from, '');
     if ($subcat_where !== '') $vendor_product_where[] = $subcat_where;
     if ($vendor_product_where) {
-        $where .= " AND VndCode IN (SELECT DISTINCT h.VndCode FROM invpo0 h JOIN invpo1 d ON d.SeqNo = h.SeqNo JOIN gblprod p ON p.PrdId = d.PrdID WHERE " . implode(' AND ', $vendor_product_where) . ")";
+        $product_vendor_join = " INNER JOIN (SELECT h.VndCode AS MatchedVendorCode FROM invpo0 h JOIN invpo1 d ON d.SeqNo = h.SeqNo JOIN gblprod p ON p.PrdId = d.PrdID WHERE "
+                             . implode(' AND ', $vendor_product_where)
+                             . " GROUP BY h.VndCode) product_vendors ON product_vendors.MatchedVendorCode = gblvend.VndCode";
     }
 
     $result = mysqli_query($conn, "
         SELECT VndCode, VndName, VndAdd1, VndAdd2, VndAdd3, VndAdd4,
                VndTel, VndEmail, VndTaxNo, VndCurBal, VndTerm, VndMobile, VndCatCode
-        FROM gblvend
+        FROM gblvend $product_vendor_join
         WHERE $where
         ORDER BY VndName
     ");

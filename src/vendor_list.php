@@ -14,6 +14,7 @@ $cat_from   = strtoupper(trim($_GET['cat_from'] ?? ''));
 $subcat_from = strtoupper(trim($_GET['subcat_from'] ?? ''));
 
 $where = '1=1';
+$product_vendor_join = '';
 if ($search !== '') {
     $s_ascii = db_escape($search);   // VndCode, VndTel, VndTaxNo
     $s_tis   = db_search($search);   // VndName, VndAdd1 (TIS-620)
@@ -37,7 +38,11 @@ if ($cat_where !== '') $vendor_product_where[] = $cat_where;
 $subcat_where = recv_range_inner('p.SubCatCode', $subcat_from, '');
 if ($subcat_where !== '') $vendor_product_where[] = $subcat_where;
 if ($vendor_product_where) {
-    $where .= " AND VndCode IN (SELECT DISTINCT h.VndCode FROM invpo0 h JOIN invpo1 d ON d.SeqNo = h.SeqNo JOIN gblprod p ON p.PrdId = d.PrdID WHERE " . implode(' AND ', $vendor_product_where) . ")";
+    // Materialize matching vendors once. MySQL 5.5 otherwise turns IN into a
+    // dependent subquery and scans every PO line once per vendor.
+    $product_vendor_join = " INNER JOIN (SELECT h.VndCode AS MatchedVendorCode FROM invpo0 h JOIN invpo1 d ON d.SeqNo = h.SeqNo JOIN gblprod p ON p.PrdId = d.PrdID WHERE "
+                         . implode(' AND ', $vendor_product_where)
+                         . " GROUP BY h.VndCode) product_vendors ON product_vendors.MatchedVendorCode = gblvend.VndCode";
 }
 
 $active_filters = ($vnd_from !== '' ? 1 : 0) + ($vnd_to !== '' ? 1 : 0) + ($vname_from !== '' ? 1 : 0) + ($vname_to !== '' ? 1 : 0) + ($cat_from !== '' ? 1 : 0) + ($subcat_from !== '' ? 1 : 0);
@@ -45,7 +50,7 @@ $active_filters = ($vnd_from !== '' ? 1 : 0) + ($vnd_to !== '' ? 1 : 0) + ($vnam
 $result = mysqli_query($conn, "
     SELECT VndCode, VndName, VndAdd1, VndAdd2, VndTel, VndTaxNo, VndCurBal, VndTerm,
            VndLastCls
-    FROM gblvend
+    FROM gblvend $product_vendor_join
     WHERE $where
     ORDER BY VndName
 ");

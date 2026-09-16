@@ -30,6 +30,8 @@ mysql -uroot -p"$LOCAL_PASS" "$LOCAL_DB" 2>/dev/null <<'SQL'
 CREATE INDEX IF NOT EXISTS idx_PrdID   ON invpo1(PrdID);
 CREATE INDEX IF NOT EXISTS idx_PoDate  ON invpo0(PoDate);
 CREATE INDEX IF NOT EXISTS idx_VndCode ON invpo0(VndCode);
+CREATE INDEX IF NOT EXISTS idx_CateCode ON gblprod(CateCode);
+CREATE INDEX IF NOT EXISTS idx_SubCatCode ON gblprod(SubCatCode);
 SQL
 
 echo "[RESTORE] ✅ เสร็จสมบูรณ์ — Inventorium พร้อมใช้งานโดยไม่ต้อง Carmen"
