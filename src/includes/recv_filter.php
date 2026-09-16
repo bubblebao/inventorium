@@ -2,7 +2,7 @@
 // ───────────────────────────────────────────────────────────────────────────
 // Shared filter builder for Receiving report — recv_list.php + export.php
 // รองรับการค้นหาเป็น "ช่วง" From/To ทุกช่อง (เหมือน Carmen Receiving Detail Report)
-//   Date · Vendor · Location · Category · Product · Reference#  → range
+//   Date · Vendor · Location · Category · Subcategory · Product · Reference#  → range
 //   Receiving Type (I/D) → single
 // ต้อง require หลัง config/db.php (ใช้ db_escape)
 // ───────────────────────────────────────────────────────────────────────────
@@ -12,7 +12,9 @@ function recv_range_inner(string $col, string $from, string $to): string {
     $from = trim($from); $to = trim($to);
     if ($from !== '' && $to !== '')
         return "$col BETWEEN '" . db_escape($from) . "' AND '" . db_escape($to) . "'";
-    if ($from !== '') return "$col >= '" . db_escape($from) . "'";
+    // Selecting one value in a From field means that exact value. This matches
+    // the filter hint and prevents a category such as FD from including GE–ZZ.
+    if ($from !== '') return "$col = '" . db_escape($from) . "'";
     if ($to   !== '') return "$col <= '" . db_escape($to)   . "'";
     return '';
 }
@@ -41,6 +43,7 @@ function recv_collect_params(string $def_from, string $def_to): array {
         'vnd_from'  => $up('vnd_from'), 'vnd_to' => $up('vnd_to'),
         'loc_from'  => $up('loc_from'), 'loc_to' => $up('loc_to'),
         'cat_from'  => $up('cat_from'), 'cat_to' => $up('cat_to'),
+        'subcat_from' => $up('subcat_from'), 'subcat_to' => $up('subcat_to'),
         'prd_from'  => $up('prd_from'), 'prd_to' => $up('prd_to'),
         'ref_from'  => $up('ref_from'), 'ref_to' => $up('ref_to'),
         'inv_type'  => $inv_type,
@@ -59,9 +62,15 @@ function recv_where_from_params(array $p): string {
     $prd = recv_range_inner('PrdID', $p['prd_from'], $p['prd_to']);
     if ($prd !== '') $w .= " AND h.SeqNo IN (SELECT SeqNo FROM invrecv1 WHERE $prd)";
 
-    // Category range → join gblprod
+    // Category and Subcategory must match the same product line in the document.
+    $product_filters = [];
     $cat = recv_range_inner('p.CateCode', $p['cat_from'], $p['cat_to']);
-    if ($cat !== '') $w .= " AND h.SeqNo IN (SELECT r.SeqNo FROM invrecv1 r JOIN gblprod p ON p.PrdId = r.PrdID WHERE $cat)";
+    if ($cat !== '') $product_filters[] = $cat;
+    $subcat = recv_range_inner('p.SubCatCode', $p['subcat_from'], $p['subcat_to']);
+    if ($subcat !== '') $product_filters[] = $subcat;
+    if ($product_filters) {
+        $w .= " AND h.SeqNo IN (SELECT r.SeqNo FROM invrecv1 r JOIN gblprod p ON p.PrdId = r.PrdID WHERE " . implode(' AND ', $product_filters) . ")";
+    }
 
     return $w;
 }

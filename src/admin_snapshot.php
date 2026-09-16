@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'dump'
     set_time_limit(300);                // 5 min — large dataset
     ini_set('memory_limit', '512M');
 
-    $tables = ['invpo0', 'invpo1', 'gblvend', 'gblprod'];
+    $tables = ['invpo0', 'invpo1', 'gblvend', 'gblprod', 'lookupdesc', 'lookups'];
 
     // Write to temp file (avoid buffering 600K rows in memory)
     $tmp = tempnam(sys_get_temp_dir(), 'inv_snap_');
@@ -98,7 +98,7 @@ $page_title = t('snapshot_title');
 
 // Quick row counts (cached 5 min — not critical)
 $stats = [];
-foreach (['invpo0' => 'PO Headers', 'invpo1' => 'PO Lines', 'gblvend' => 'Vendors', 'gblprod' => 'Products'] as $tbl => $label) {
+foreach (['invpo0' => 'PO Headers', 'invpo1' => 'PO Lines', 'gblvend' => 'Vendors', 'gblprod' => 'Products', 'lookups' => 'Category Lookups'] as $tbl => $label) {
     $r = mysqli_query($conn, "SELECT COUNT(*) AS c FROM `$tbl`");
     $stats[$label] = $r ? (int)mysqli_fetch_assoc($r)['c'] : 0;
 }

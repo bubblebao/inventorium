@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/recv_filter.php';
 $page_title = t('po_list');
 
 if (!defined('PER_PAGE')) define('PER_PAGE', 50);
@@ -25,6 +26,8 @@ $date_to   = $_GET['date_to']   ?? "$year_max-12-31";
 $vnd_code  = $_GET['vnd_code']  ?? '';
 $inv_no    = $_GET['inv_no']    ?? '';
 $source    = $_GET['source']    ?? '';
+$cat_from  = strtoupper(trim($_GET['cat_from'] ?? ''));
+$subcat_from = strtoupper(trim($_GET['subcat_from'] ?? ''));
 $page      = max(1, (int)($_GET['page'] ?? 1));
 
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) $date_from = "$year_max-01-01";
@@ -50,6 +53,16 @@ if ($vnd_code !== '') $where .= " AND h.VndCode = '"     . db_escape($vnd_code) 
 if ($inv_no   !== '') $where .= " AND h.PoNo LIKE '%"    . db_escape($inv_no)   . "%'";
 if ($source   !== '') $where .= " AND h.LocaCode = '"    . db_escape($source)   . "'";
 
+// Product category filters apply to one PO line, not to the PO header.
+$product_filters = [];
+$cat_where = recv_range_inner('p.CateCode', $cat_from, '');
+if ($cat_where !== '') $product_filters[] = $cat_where;
+$subcat_where = recv_range_inner('p.SubCatCode', $subcat_from, '');
+if ($subcat_where !== '') $product_filters[] = $subcat_where;
+if ($product_filters) {
+    $where .= " AND h.SeqNo IN (SELECT d.SeqNo FROM invpo1 d JOIN gblprod p ON p.PrdId = d.PrdID WHERE " . implode(' AND ', $product_filters) . ")";
+}
+
 // ── Count ──
 $r_count    = mysqli_query($conn, "SELECT COUNT(*) AS total FROM invpo0 h WHERE $where");
 $total_rows = (int)(($r_count ? mysqli_fetch_assoc($r_count) : null)['total'] ?? 0);
@@ -72,10 +85,18 @@ $result = mysqli_query($conn, "
 // ── Dropdown data ──
 $r_vnd = mysqli_query($conn, "SELECT VndCode, VndName FROM gblvend ORDER BY VndName");
 $r_src = mysqli_query($conn, "SELECT DISTINCT LocaCode FROM invpo0 WHERE LocaCode <> '' AND LocaCode IS NOT NULL ORDER BY LocaCode");
+$r_lookup_table = mysqli_query($conn, "SHOW TABLES LIKE 'lookups'");
+$has_lookups = $r_lookup_table && mysqli_num_rows($r_lookup_table) > 0;
+$lookup_name = $has_lookups ? 'l.TbVal1' : "''";
+$lookup_join = $has_lookups ? "LEFT JOIN lookups l ON l.TbName = 'CATE' AND l.TbKey = p.CateCode" : '';
+$r_cat = mysqli_query($conn, "SELECT DISTINCT p.CateCode, $lookup_name AS CateName FROM gblprod p $lookup_join WHERE p.CateCode <> '' AND p.CateCode IS NOT NULL ORDER BY p.CateCode");
+$lookup_join = $has_lookups ? "LEFT JOIN lookups l ON l.TbName = 'SCAT' AND l.TbKey = p.SubCatCode" : '';
+$r_subcat = mysqli_query($conn, "SELECT DISTINCT p.SubCatCode, p.CateCode, $lookup_name AS SubCatName FROM gblprod p $lookup_join WHERE p.SubCatCode <> '' AND p.SubCatCode IS NOT NULL ORDER BY p.SubCatCode");
 
 // ── Export URLs ──
 $filter_params = ['date_from' => $date_from, 'date_to' => $date_to,
-                  'vnd_code' => $vnd_code, 'inv_no' => $inv_no, 'source' => $source];
+                  'vnd_code' => $vnd_code, 'inv_no' => $inv_no, 'source' => $source,
+                  'cat_from' => $cat_from, 'subcat_from' => $subcat_from];
 $export_excel = '/export.php?' . http_build_query(array_merge(['format'=>'excel','type'=>'po_list'], $filter_params));
 $export_pdf   = '/export.php?' . http_build_query(array_merge(['format'=>'pdf',  'type'=>'po_list'], $filter_params));
 
@@ -86,7 +107,7 @@ $base_params = array_filter(array_merge($filter_params, [
 ]));
 
 // Count active filters (นอกเหนือจากวันที่) — โชว์ badge
-$active_filters = ($vnd_code !== '' ? 1 : 0) + ($inv_no !== '' ? 1 : 0) + ($source !== '' ? 1 : 0);
+$active_filters = ($vnd_code !== '' ? 1 : 0) + ($inv_no !== '' ? 1 : 0) + ($source !== '' ? 1 : 0) + ($cat_from !== '' ? 1 : 0) + ($subcat_from !== '' ? 1 : 0);
 
 require_once __DIR__ . '/includes/header.php';
 
@@ -107,7 +128,7 @@ function sort_th(string $col, string $label, string $cur_sort, string $cur_dir, 
 <!-- Year Shortcut Bar -->
 <?php
   // Preserve current filter values when switching year
-  $keep = array_filter(['vnd_code' => $vnd_code, 'inv_no' => $inv_no, 'source' => $source], fn($v) => $v !== '');
+  $keep = array_filter(['vnd_code' => $vnd_code, 'inv_no' => $inv_no, 'source' => $source, 'cat_from' => $cat_from, 'subcat_from' => $subcat_from], fn($v) => $v !== '');
   $build_year_url = function($from, $to) use ($keep) {
       return '?' . http_build_query(array_merge($keep, ['date_from' => $from, 'date_to' => $to]));
   };
@@ -183,6 +204,28 @@ function sort_th(string $col, string $label, string $cur_sort, string $cur_dir, 
       <div class="col-md-2 d-flex gap-1">
         <button type="submit" class="btn btn-sm btn-inv-primary"><i class="bi bi-search"></i> <?= t('search') ?></button>
         <a href="/po_list.php" class="btn btn-sm btn-inv-outline"><?= t('reset') ?></a>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small fw-bold"><?= t('category') ?></label>
+        <select name="cat_from" class="form-select form-select-sm">
+          <option value="">— <?= t('all') ?> —</option>
+          <?php while ($c = mysqli_fetch_assoc($r_cat)): ?>
+            <option value="<?= htmlspecialchars($c['CateCode']) ?>" <?= $cat_from === $c['CateCode'] ? 'selected' : '' ?>>
+              <?= htmlspecialchars($c['CateCode']) ?> — <?= htmlspecialchars(db_str($c['CateName'])) ?>
+            </option>
+          <?php endwhile; ?>
+        </select>
+      </div>
+      <div class="col-md-5">
+        <label class="form-label small fw-bold"><?= t('subcategory') ?></label>
+        <select name="subcat_from" class="form-select form-select-sm">
+          <option value="">— <?= t('all') ?> —</option>
+          <?php while ($s = mysqli_fetch_assoc($r_subcat)): ?>
+            <option value="<?= htmlspecialchars($s['SubCatCode']) ?>" <?= $subcat_from === $s['SubCatCode'] ? 'selected' : '' ?>>
+              <?= htmlspecialchars($s['SubCatCode']) ?> — <?= htmlspecialchars(db_str($s['SubCatName']) ?: $s['CateCode']) ?>
+            </option>
+          <?php endwhile; ?>
+        </select>
       </div>
     </form>
   </div>

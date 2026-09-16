@@ -85,6 +85,7 @@ $GLOBALS['TRANSLATIONS'] = [
     'item_eng'          => ['th' => 'ชื่ออังกฤษ',        'en' => 'English Name'],
     'item_thai'         => ['th' => 'ชื่อไทย',          'en' => 'Thai Name'],
     'category'          => ['th' => 'หมวด',             'en' => 'Category'],
+    'subcategory'       => ['th' => 'หมวดหมู่ย่อย',       'en' => 'Subcategory'],
     'base_unit'         => ['th' => 'หน่วยฐาน',         'en' => 'Base Unit'],
     'default_vendor'    => ['th' => 'Vendor หลัก',      'en' => 'Default Vendor'],
     'default_price'     => ['th' => 'Default Price',    'en' => 'Default Price'],
@@ -205,7 +206,7 @@ $GLOBALS['TRANSLATIONS'] = [
     'snapshot_done'     => ['th' => 'เสร็จแล้ว! กำลังดาวน์โหลด', 'en' => 'Done! Downloading'],
     'snapshot_warning'  => ['th' => '⚠ อาจใช้เวลา 1–3 นาที (ข้อมูลเกือบล้านแถว)', 'en' => '⚠ May take 1–3 minutes (nearly 1M rows)'],
     'snapshot_note'     => ['th' => 'วิธีใช้งาน: นำไฟล์ที่ได้ไปเปลี่ยนที่ db-init/snapshot.sql.gz แล้ว push ขึ้น git', 'en' => 'Usage: Replace db-init/snapshot.sql.gz with downloaded file, then push to git'],
-    'snapshot_tables'   => ['th' => 'ตารางที่ dump: invpo0, invpo1, gblvend, gblprod', 'en' => 'Tables: invpo0, invpo1, gblvend, gblprod'],
+    'snapshot_tables'   => ['th' => 'ตารางที่ dump: invpo0, invpo1, gblvend, gblprod, lookupdesc, lookups', 'en' => 'Tables: invpo0, invpo1, gblvend, gblprod, lookupdesc, lookups'],
     'snapshot_nav'      => ['th' => 'Re-Snapshot DB',     'en' => 'Re-Snapshot DB'],
     'snapshot_stats'    => ['th' => 'สถิติข้อมูลปัจจุบัน', 'en' => 'Current Data Stats'],
 

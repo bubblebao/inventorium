@@ -484,14 +484,23 @@ $prd_from = strtoupper(trim($_GET['prd_from'] ?? ''));
 $prd_to   = strtoupper(trim($_GET['prd_to']   ?? ''));
 $cat_from = strtoupper(trim($_GET['cat_from'] ?? ''));
 $cat_to   = strtoupper(trim($_GET['cat_to']   ?? ''));
+$subcat_from = strtoupper(trim($_GET['subcat_from'] ?? ''));
+$subcat_to   = strtoupper(trim($_GET['subcat_to']   ?? ''));
 
 $range_where  = recv_range_clause('PrdId',    $prd_from, $prd_to);
 $range_where .= recv_range_clause('CateCode', $cat_from, $cat_to);
-$active_filters = ($prd_from !== '' ? 1 : 0) + ($prd_to !== '' ? 1 : 0) + ($cat_from !== '' ? 1 : 0) + ($cat_to !== '' ? 1 : 0);
+$range_where .= recv_range_clause('SubCatCode', $subcat_from, $subcat_to);
+$active_filters = ($prd_from !== '' ? 1 : 0) + ($prd_to !== '' ? 1 : 0) + ($cat_from !== '' ? 1 : 0) + ($cat_to !== '' ? 1 : 0) + ($subcat_from !== '' ? 1 : 0) + ($subcat_to !== '' ? 1 : 0);
 
 // ── Datalist data (พิมพ์ค้นหาได้ — ไม่ผูกกับผลค้นหาปัจจุบัน) ──
 $r_prd_dl = mysqli_query($conn, "SELECT PrdId, PrdDescE FROM gblprod WHERE Active = 1 ORDER BY PrdId");
-$r_cat_dl = mysqli_query($conn, "SELECT CateCode, PrdDescE FROM gblprod WHERE CateCode <> '' AND CateCode IS NOT NULL GROUP BY CateCode ORDER BY CateCode");
+$r_lookup_table = mysqli_query($conn, "SHOW TABLES LIKE 'lookups'");
+$has_lookups = $r_lookup_table && mysqli_num_rows($r_lookup_table) > 0;
+$lookup_name = $has_lookups ? 'l.TbVal1' : "''";
+$lookup_join = $has_lookups ? "LEFT JOIN lookups l ON l.TbName = 'CATE' AND l.TbKey = p.CateCode" : '';
+$r_cat_dl = mysqli_query($conn, "SELECT DISTINCT p.CateCode, $lookup_name AS CateName FROM gblprod p $lookup_join WHERE p.CateCode <> '' AND p.CateCode IS NOT NULL ORDER BY p.CateCode");
+$lookup_join = $has_lookups ? "LEFT JOIN lookups l ON l.TbName = 'SCAT' AND l.TbKey = p.SubCatCode" : '';
+$r_subcat_dl = mysqli_query($conn, "SELECT DISTINCT p.SubCatCode, p.CateCode, $lookup_name AS SubCatName FROM gblprod p $lookup_join WHERE p.SubCatCode <> '' AND p.SubCatCode IS NOT NULL ORDER BY p.SubCatCode");
 
 if ($search === '') {
     // Default: แสดงสินค้าทั้งหมดเรียงตาม PrdId (Active ขึ้นก่อน)
@@ -572,6 +581,16 @@ require_once __DIR__ . '/includes/header.php';
         </div>
       </div>
 
+      <!-- Subcategory range -->
+      <div class="col-12 col-md-6 col-xl-4">
+        <label class="form-label small fw-bold mb-1"><i class="bi bi-tags me-1 text-muted"></i><?= t('subcategory') ?></label>
+        <div class="d-flex gap-1">
+          <input type="text" name="subcat_from" list="dl_subcat" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($subcat_from) ?>" style="text-transform:uppercase">
+          <span class="align-self-center text-muted small">→</span>
+          <input type="text" name="subcat_to" list="dl_subcat" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($subcat_to) ?>" style="text-transform:uppercase">
+        </div>
+      </div>
+
       <div class="col-12 d-flex gap-1">
         <button type="submit" class="btn btn-inv-primary"><i class="bi bi-search"></i> <?= t('search') ?></button>
         <a href="/item_history.php" class="btn btn-inv-outline"><i class="bi bi-x-lg"></i> <?= t('reset') ?></a>
@@ -583,7 +602,8 @@ require_once __DIR__ . '/includes/header.php';
 
 <!-- Datalists -->
 <datalist id="dl_prd"><?php while ($pr = mysqli_fetch_assoc($r_prd_dl)): ?><option value="<?= htmlspecialchars($pr['PrdId']) ?>"><?= htmlspecialchars(db_str($pr['PrdDescE'])) ?></option><?php endwhile; ?></datalist>
-<datalist id="dl_cat"><?php while ($c = mysqli_fetch_assoc($r_cat_dl)): ?><option value="<?= htmlspecialchars($c['CateCode']) ?>"><?= htmlspecialchars(db_str($c['PrdDescE'])) ?></option><?php endwhile; ?></datalist>
+<datalist id="dl_cat"><?php while ($c = mysqli_fetch_assoc($r_cat_dl)): ?><option value="<?= htmlspecialchars($c['CateCode']) ?>"><?= htmlspecialchars(db_str($c['CateName'])) ?></option><?php endwhile; ?></datalist>
+<datalist id="dl_subcat"><?php while ($s = mysqli_fetch_assoc($r_subcat_dl)): ?><option value="<?= htmlspecialchars($s['SubCatCode']) ?>"><?= htmlspecialchars(db_str($s['SubCatName']) ?: $s['CateCode']) ?></option><?php endwhile; ?></datalist>
 
 <?php
 $result_count = $results ? mysqli_num_rows($results) : 0;
@@ -618,6 +638,7 @@ $showing_max  = $is_default && $result_count >= $LIMIT;
         $item_export_params = array_filter([
             'search' => $search, 'prd_from' => $prd_from, 'prd_to' => $prd_to,
             'cat_from' => $cat_from, 'cat_to' => $cat_to,
+            'subcat_from' => $subcat_from, 'subcat_to' => $subcat_to,
         ], fn($v) => $v !== '');
       ?>
       <div class="d-flex gap-1">

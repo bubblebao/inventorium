@@ -46,6 +46,8 @@ function exportPoList(string $format): void
     $vnd_code  = $_GET['vnd_code']  ?? '';
     $inv_no    = $_GET['inv_no']    ?? '';
     $source    = $_GET['source']    ?? '';
+    $cat_from  = strtoupper(trim($_GET['cat_from'] ?? ''));
+    $subcat_from = strtoupper(trim($_GET['subcat_from'] ?? ''));
 
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) $date_from = date('Y-m-01');
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_to))   $date_to   = date('Y-m-t');
@@ -54,6 +56,14 @@ function exportPoList(string $format): void
     if ($vnd_code !== '') $where .= " AND h.VndCode = '"   . db_escape($vnd_code) . "'";
     if ($inv_no   !== '') $where .= " AND h.PoNo LIKE '%"  . db_escape($inv_no)   . "%'";
     if ($source   !== '') $where .= " AND h.LocaCode = '"  . db_escape($source)   . "'";
+    $product_filters = [];
+    $cat_where = recv_range_inner('p.CateCode', $cat_from, '');
+    if ($cat_where !== '') $product_filters[] = $cat_where;
+    $subcat_where = recv_range_inner('p.SubCatCode', $subcat_from, '');
+    if ($subcat_where !== '') $product_filters[] = $subcat_where;
+    if ($product_filters) {
+        $where .= " AND h.SeqNo IN (SELECT d.SeqNo FROM invpo1 d JOIN gblprod p ON p.PrdId = d.PrdID WHERE " . implode(' AND ', $product_filters) . ")";
+    }
 
     $result = mysqli_query($conn, "
         SELECT h.PoDate, h.PoNo, h.RefNo, h.VndCode, v.VndName,
@@ -457,6 +467,8 @@ function exportVendor(string $format): void
     $vnd_to     = strtoupper(trim($_GET['vnd_to']     ?? ''));
     $vname_from = trim($_GET['vname_from'] ?? '');
     $vname_to   = trim($_GET['vname_to']   ?? '');
+    $cat_from   = strtoupper(trim($_GET['cat_from'] ?? ''));
+    $subcat_from = strtoupper(trim($_GET['subcat_from'] ?? ''));
 
     $where = '1=1';
     if ($search !== '') {
@@ -470,8 +482,16 @@ function exportVendor(string $format): void
         $vnf = db_search($vname_from);
         $vnt = db_search($vname_to);
         if ($vname_from !== '' && $vname_to !== '') $where .= " AND VndName BETWEEN '$vnf' AND '$vnt'";
-        elseif ($vname_from !== '') $where .= " AND VndName >= '$vnf'";
+        elseif ($vname_from !== '') $where .= " AND VndName = '$vnf'";
         else $where .= " AND VndName <= '$vnt'";
+    }
+    $vendor_product_where = [];
+    $cat_where = recv_range_inner('p.CateCode', $cat_from, '');
+    if ($cat_where !== '') $vendor_product_where[] = $cat_where;
+    $subcat_where = recv_range_inner('p.SubCatCode', $subcat_from, '');
+    if ($subcat_where !== '') $vendor_product_where[] = $subcat_where;
+    if ($vendor_product_where) {
+        $where .= " AND VndCode IN (SELECT DISTINCT h.VndCode FROM invpo0 h JOIN invpo1 d ON d.SeqNo = h.SeqNo JOIN gblprod p ON p.PrdId = d.PrdID WHERE " . implode(' AND ', $vendor_product_where) . ")";
     }
 
     $result = mysqli_query($conn, "
@@ -875,6 +895,8 @@ function exportItemList(string $format): void
     $prd_to   = strtoupper(trim($_GET['prd_to']   ?? ''));
     $cat_from = strtoupper(trim($_GET['cat_from'] ?? ''));
     $cat_to   = strtoupper(trim($_GET['cat_to']   ?? ''));
+    $subcat_from = strtoupper(trim($_GET['subcat_from'] ?? ''));
+    $subcat_to   = strtoupper(trim($_GET['subcat_to']   ?? ''));
 
     $where = '1=1';
     if ($search !== '') {
@@ -887,6 +909,7 @@ function exportItemList(string $format): void
     }
     $where .= recv_range_clause('p.PrdId',    $prd_from, $prd_to);
     $where .= recv_range_clause('p.CateCode', $cat_from, $cat_to);
+    $where .= recv_range_clause('p.SubCatCode', $subcat_from, $subcat_to);
 
     $result = mysqli_query($conn, "
         SELECT p.PrdId, p.Barcode, p.PrdDescE, p.PrdDescT, p.BaseUnit, p.LastCost, p.OnHand, p.Active,

@@ -10,6 +10,8 @@ $vnd_from   = strtoupper(trim($_GET['vnd_from']   ?? ''));
 $vnd_to     = strtoupper(trim($_GET['vnd_to']     ?? ''));
 $vname_from = trim($_GET['vname_from'] ?? '');
 $vname_to   = trim($_GET['vname_to']   ?? '');
+$cat_from   = strtoupper(trim($_GET['cat_from'] ?? ''));
+$subcat_from = strtoupper(trim($_GET['subcat_from'] ?? ''));
 
 $where = '1=1';
 if ($search !== '') {
@@ -23,11 +25,22 @@ if ($vname_from !== '' || $vname_to !== '') {
     $vnf = db_search($vname_from);
     $vnt = db_search($vname_to);
     if ($vname_from !== '' && $vname_to !== '') $where .= " AND VndName BETWEEN '$vnf' AND '$vnt'";
-    elseif ($vname_from !== '') $where .= " AND VndName >= '$vnf'";
+    elseif ($vname_from !== '') $where .= " AND VndName = '$vnf'";
     else $where .= " AND VndName <= '$vnt'";
 }
 
-$active_filters = ($vnd_from !== '' ? 1 : 0) + ($vnd_to !== '' ? 1 : 0) + ($vname_from !== '' ? 1 : 0) + ($vname_to !== '' ? 1 : 0);
+// Vendor master has its own vendor grouping.  Product Category/Subcategory here
+// intentionally means products the vendor has supplied on a PO.
+$vendor_product_where = [];
+$cat_where = recv_range_inner('p.CateCode', $cat_from, '');
+if ($cat_where !== '') $vendor_product_where[] = $cat_where;
+$subcat_where = recv_range_inner('p.SubCatCode', $subcat_from, '');
+if ($subcat_where !== '') $vendor_product_where[] = $subcat_where;
+if ($vendor_product_where) {
+    $where .= " AND VndCode IN (SELECT DISTINCT h.VndCode FROM invpo0 h JOIN invpo1 d ON d.SeqNo = h.SeqNo JOIN gblprod p ON p.PrdId = d.PrdID WHERE " . implode(' AND ', $vendor_product_where) . ")";
+}
+
+$active_filters = ($vnd_from !== '' ? 1 : 0) + ($vnd_to !== '' ? 1 : 0) + ($vname_from !== '' ? 1 : 0) + ($vname_to !== '' ? 1 : 0) + ($cat_from !== '' ? 1 : 0) + ($subcat_from !== '' ? 1 : 0);
 
 $result = mysqli_query($conn, "
     SELECT VndCode, VndName, VndAdd1, VndAdd2, VndTel, VndTaxNo, VndCurBal, VndTerm,
@@ -40,6 +53,13 @@ $result = mysqli_query($conn, "
 // ── Datalist data (พิมพ์ค้นหาได้ — ไม่ผูกกับผลค้นหาปัจจุบัน) ──
 $r_vnd_dl     = mysqli_query($conn, "SELECT VndCode, VndName FROM gblvend ORDER BY VndCode");
 $r_vndname_dl = mysqli_query($conn, "SELECT VndCode, VndName FROM gblvend ORDER BY VndName");
+$r_lookup_table = mysqli_query($conn, "SHOW TABLES LIKE 'lookups'");
+$has_lookups = $r_lookup_table && mysqli_num_rows($r_lookup_table) > 0;
+$lookup_name = $has_lookups ? 'l.TbVal1' : "''";
+$lookup_join = $has_lookups ? "LEFT JOIN lookups l ON l.TbName = 'CATE' AND l.TbKey = p.CateCode" : '';
+$r_cat = mysqli_query($conn, "SELECT DISTINCT p.CateCode, $lookup_name AS CateName FROM gblprod p $lookup_join WHERE p.CateCode <> '' AND p.CateCode IS NOT NULL ORDER BY p.CateCode");
+$lookup_join = $has_lookups ? "LEFT JOIN lookups l ON l.TbName = 'SCAT' AND l.TbKey = p.SubCatCode" : '';
+$r_subcat = mysqli_query($conn, "SELECT DISTINCT p.SubCatCode, p.CateCode, $lookup_name AS SubCatName FROM gblprod p $lookup_join WHERE p.SubCatCode <> '' AND p.SubCatCode IS NOT NULL ORDER BY p.SubCatCode");
 
 require_once __DIR__ . '/includes/header.php';
 ?>
@@ -78,6 +98,26 @@ require_once __DIR__ . '/includes/header.php';
         </div>
       </div>
 
+      <div class="col-12 col-md-6 col-xl-4">
+        <label class="form-label small fw-bold mb-1"><i class="bi bi-tags me-1 text-muted"></i><?= t('category') ?> (<?= $GLOBALS['LANG'] === 'th' ? 'สินค้าที่เคยซื้อ' : 'Purchased products' ?>)</label>
+        <select name="cat_from" class="form-select form-select-sm">
+          <option value="">— <?= t('all') ?> —</option>
+          <?php while ($c = mysqli_fetch_assoc($r_cat)): ?>
+            <option value="<?= htmlspecialchars($c['CateCode']) ?>" <?= $cat_from === $c['CateCode'] ? 'selected' : '' ?>><?= htmlspecialchars($c['CateCode']) ?> — <?= htmlspecialchars(db_str($c['CateName'])) ?></option>
+          <?php endwhile; ?>
+        </select>
+      </div>
+
+      <div class="col-12 col-md-6 col-xl-4">
+        <label class="form-label small fw-bold mb-1"><i class="bi bi-tags me-1 text-muted"></i><?= t('subcategory') ?> (<?= $GLOBALS['LANG'] === 'th' ? 'สินค้าที่เคยซื้อ' : 'Purchased products' ?>)</label>
+        <select name="subcat_from" class="form-select form-select-sm">
+          <option value="">— <?= t('all') ?> —</option>
+          <?php while ($s = mysqli_fetch_assoc($r_subcat)): ?>
+            <option value="<?= htmlspecialchars($s['SubCatCode']) ?>" <?= $subcat_from === $s['SubCatCode'] ? 'selected' : '' ?>><?= htmlspecialchars($s['SubCatCode']) ?> — <?= htmlspecialchars(db_str($s['SubCatName']) ?: $s['CateCode']) ?></option>
+          <?php endwhile; ?>
+        </select>
+      </div>
+
       <div class="col-12 d-flex gap-1">
         <button type="submit" class="btn btn-sm btn-inv-primary"><i class="bi bi-search"></i> <?= t('search') ?></button>
         <a href="/vendor_list.php" class="btn btn-sm btn-inv-outline"><i class="bi bi-x-lg"></i> <?= t('reset') ?></a>
@@ -101,6 +141,7 @@ require_once __DIR__ . '/includes/header.php';
       $vnd_export_params = array_filter([
           'search' => $search, 'vnd_from' => $vnd_from, 'vnd_to' => $vnd_to,
           'vname_from' => $vname_from, 'vname_to' => $vname_to,
+          'cat_from' => $cat_from, 'subcat_from' => $subcat_from,
       ], fn($v) => $v !== '');
     ?>
     <div class="d-flex gap-1">

@@ -60,7 +60,27 @@ $result = mysqli_query($conn, "
 // ── Datalist data (พิมพ์ค้นหาได้ — ดีกว่า dropdown ของ Carmen) ──
 $r_vnd = mysqli_query($conn, "SELECT VndCode, VndName FROM gblvend ORDER BY VndCode");
 $r_loc = mysqli_query($conn, "SELECT DISTINCT LocaCode FROM invrecv0 WHERE LocaCode <> '' AND LocaCode IS NOT NULL ORDER BY LocaCode");
-$r_cat = mysqli_query($conn, "SELECT CateCode, PrdDescE FROM gblprod WHERE CateCode <> '' AND CateCode IS NOT NULL GROUP BY CateCode ORDER BY CateCode");
+// CATE/SCAT in lookups map product codes to their real names (Food, Meat, Wine, etc.).
+// Keep the code-only fallback so an older database remains usable before its migration runs.
+$r_lookup_table = mysqli_query($conn, "SHOW TABLES LIKE 'lookups'");
+$has_lookups = $r_lookup_table && mysqli_num_rows($r_lookup_table) > 0;
+$lookup_join = $has_lookups ? "LEFT JOIN lookups l ON l.TbName = 'CATE' AND l.TbKey = p.CateCode" : '';
+$lookup_name = $has_lookups ? 'l.TbVal1' : "''";
+$r_cat = mysqli_query($conn, "
+    SELECT DISTINCT p.CateCode, $lookup_name AS CateName
+    FROM gblprod p
+    $lookup_join
+    WHERE p.CateCode <> '' AND p.CateCode IS NOT NULL
+    ORDER BY p.CateCode
+");
+$lookup_join = $has_lookups ? "LEFT JOIN lookups l ON l.TbName = 'SCAT' AND l.TbKey = p.SubCatCode" : '';
+$r_subcat = mysqli_query($conn, "
+    SELECT DISTINCT p.SubCatCode, p.CateCode, $lookup_name AS SubCatName
+    FROM gblprod p
+    $lookup_join
+    WHERE p.SubCatCode <> '' AND p.SubCatCode IS NOT NULL
+    ORDER BY p.SubCatCode
+");
 $r_prd = mysqli_query($conn, "SELECT PrdId, PrdDescE FROM gblprod WHERE Active = 1 ORDER BY PrdId");
 
 // ── Export + link params ──
@@ -95,7 +115,7 @@ function sort_th(string $col, string $label, string $cur_sort, string $cur_dir, 
 
 // Count active range filters (โชว์ badge บอกว่ากรองกี่เงื่อนไข)
 $active_filters = 0;
-foreach (['vnd_from','vnd_to','loc_from','loc_to','cat_from','cat_to','prd_from','prd_to','ref_from','ref_to','inv_type'] as $k) {
+foreach (['vnd_from','vnd_to','loc_from','loc_to','cat_from','cat_to','subcat_from','subcat_to','prd_from','prd_to','ref_from','ref_to','inv_type'] as $k) {
     if ($p[$k] !== '') { $active_filters++; }
 }
 ?>
@@ -182,6 +202,16 @@ foreach (['vnd_from','vnd_to','loc_from','loc_to','cat_from','cat_to','prd_from'
         </div>
       </div>
 
+      <!-- Subcategory range -->
+      <div class="col-12 col-md-6 col-xl-3">
+        <label class="form-label small fw-bold mb-1"><i class="bi bi-tags me-1 text-muted"></i><?= t('subcategory') ?></label>
+        <div class="d-flex gap-1">
+          <input type="text" name="subcat_from" list="dl_subcat" class="form-control form-control-sm" placeholder="From" value="<?= htmlspecialchars($p['subcat_from']) ?>" style="text-transform:uppercase">
+          <span class="align-self-center text-muted small">→</span>
+          <input type="text" name="subcat_to" list="dl_subcat" class="form-control form-control-sm" placeholder="To" value="<?= htmlspecialchars($p['subcat_to']) ?>" style="text-transform:uppercase">
+        </div>
+      </div>
+
       <!-- Reference# range -->
       <div class="col-12 col-md-6 col-xl-3">
         <label class="form-label small fw-bold mb-1"><i class="bi bi-hash me-1 text-muted"></i><?= t('ref_no_label') ?></label>
@@ -215,7 +245,8 @@ foreach (['vnd_from','vnd_to','loc_from','loc_to','cat_from','cat_to','prd_from'
 <!-- Datalists -->
 <datalist id="dl_vnd"><?php while ($v = mysqli_fetch_assoc($r_vnd)): ?><option value="<?= htmlspecialchars($v['VndCode']) ?>"><?= htmlspecialchars(db_str($v['VndName'])) ?></option><?php endwhile; ?></datalist>
 <datalist id="dl_loc"><?php while ($s = mysqli_fetch_assoc($r_loc)): ?><option value="<?= htmlspecialchars($s['LocaCode']) ?>"></option><?php endwhile; ?></datalist>
-<datalist id="dl_cat"><?php while ($c = mysqli_fetch_assoc($r_cat)): ?><option value="<?= htmlspecialchars($c['CateCode']) ?>"><?= htmlspecialchars(db_str($c['PrdDescE'])) ?></option><?php endwhile; ?></datalist>
+<datalist id="dl_cat"><?php while ($c = mysqli_fetch_assoc($r_cat)): ?><option value="<?= htmlspecialchars($c['CateCode']) ?>"><?= htmlspecialchars(db_str($c['CateName'])) ?></option><?php endwhile; ?></datalist>
+<datalist id="dl_subcat"><?php while ($s = mysqli_fetch_assoc($r_subcat)): ?><option value="<?= htmlspecialchars($s['SubCatCode']) ?>"><?= htmlspecialchars(db_str($s['SubCatName']) ?: $s['CateCode']) ?></option><?php endwhile; ?></datalist>
 <datalist id="dl_prd"><?php while ($pr = mysqli_fetch_assoc($r_prd)): ?><option value="<?= htmlspecialchars($pr['PrdId']) ?>"><?= htmlspecialchars(db_str($pr['PrdDescE'])) ?></option><?php endwhile; ?></datalist>
 
 <!-- Results Card -->
