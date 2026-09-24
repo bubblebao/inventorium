@@ -592,7 +592,7 @@ function exportRecvList(string $format): void
     $date_from = $p['date_from'];
     $date_to   = $p['date_to'];
 
-    $result = mysqli_query($conn, "
+    $sql = "
         SELECT h.RecvDate, h.RecvNo, h.RefNo, h.PoNo, h.VndCode, v.VndName,
                h.InvType, h.LocaCode, h.CreateUser,
                d.DtlNo, d.PrdID, d.Remark AS ItemRemark, d.Qty, d.Unit, d.Cost,
@@ -604,10 +604,15 @@ function exportRecvList(string $format): void
         LEFT JOIN gblvend v ON h.VndCode = v.VndCode
         WHERE $where
         ORDER BY h.RecvDate DESC, h.SeqNo DESC, d.DtlNo ASC
-    ");
+    ";
 
-    $rows = [];
-    while ($r = mysqli_fetch_assoc($result)) $rows[] = $r;
+    // Excel may contain hundreds of thousands of item lines. Use an unbuffered
+    // result so neither mysqli nor PHP keeps the complete result set in RAM.
+    $result = mysqli_query($conn, $sql, $format === 'pdf' ? MYSQLI_STORE_RESULT : MYSQLI_USE_RESULT);
+    if (!$result) {
+        http_response_code(500);
+        exit('Unable to create Receiving export.');
+    }
 
     $typeLabel = fn($t) => $t === 'I' ? 'Inventory' : ($t === 'D' ? 'Direct' : (string)$t);
     $descFor = function($r) {
@@ -619,7 +624,7 @@ function exportRecvList(string $format): void
 
     $title   = 'Receiving List ' . fmt_date($date_from) . ' - ' . fmt_date($date_to);
     $headers = ['วันที่รับ','เลขที่รับ','PO No','Ref','รหัส Vendor','ชื่อ Vendor','ลำดับ','รหัสสินค้า','รายการสินค้า','หมวด','หมวดหมู่ย่อย','จำนวน','หน่วย','ทุน/หน่วย','ก่อนภาษี','ภาษี','ยอดรายการ','ประเภท','Location','ผู้บันทึก'];
-    $data = array_map(fn($r) => [
+    $rowForExport = fn($r) => [
         fmt_date($r['RecvDate']),
         $r['RecvNo'],
         $r['PoNo'],
@@ -640,12 +645,23 @@ function exportRecvList(string $format): void
         $typeLabel($r['InvType']),
         $r['LocaCode'],
         db_str($r['CreateUser']),
-    ], $rows);
+    ];
 
     if ($format === 'pdf') {
+        $data = [];
+        while ($r = mysqli_fetch_assoc($result)) $data[] = $rowForExport($r);
         outputPdf($title, $headers, $data, 'A3-L');
     } else {
-        outputExcel($title, $headers, $data, 'recv_list_' . date('Ymd'));
+        $dataRows = (function() use ($result, $rowForExport) {
+            while ($r = mysqli_fetch_assoc($result)) yield $rowForExport($r);
+        })();
+        outputExcelStreamed(
+            $title,
+            $headers,
+            $dataRows,
+            'recv_list_' . date('Ymd'),
+            [12,14,14,14,12,28,8,14,42,9,13,10,9,12,12,12,12,12,10,14]
+        );
     }
 }
 
@@ -1073,6 +1089,128 @@ function outputExcel(string $title, array $headers, array $data, string $filenam
 
     $writer = new Xlsx($ss);
     $writer->save('php://output');
+    exit;
+}
+
+// Memory-safe XLSX writer for large reports. PhpSpreadsheet keeps every cell
+// object in memory; this writer stores rows directly in worksheet XML on disk
+// and then packages the XML as a standard XLSX file.
+function outputExcelStreamed(string $title, array $headers, iterable $data, string $filename, array $widths = []): void
+{
+    @set_time_limit(0);
+
+    $xmlEscape = function($value): string {
+        $value = (string)$value;
+        $clean = preg_replace('/[^\x09\x0A\x0D\x20-\x{D7FF}\x{E000}-\x{FFFD}]/u', '', $value);
+        if ($clean !== null) $value = $clean;
+        return htmlspecialchars($value, ENT_QUOTES | ENT_XML1 | ENT_SUBSTITUTE, 'UTF-8');
+    };
+    $columnName = function(int $number): string {
+        $name = '';
+        while ($number > 0) {
+            $number--;
+            $name = chr(65 + ($number % 26)) . $name;
+            $number = intdiv($number, 26);
+        }
+        return $name;
+    };
+
+    $columnCount = count($headers);
+    $lastColumn = $columnName($columnCount);
+    $safeSheet = str_replace(['\\', '/', '*', '?', ':', '[', ']'], '', $title);
+    $safeSheet = mb_substr((string)$safeSheet, 0, 31);
+    if (trim($safeSheet) === '') $safeSheet = 'Report';
+
+    $sheetPath = tempnam(sys_get_temp_dir(), 'recv_sheet_');
+    $xlsxPath  = tempnam(sys_get_temp_dir(), 'recv_xlsx_');
+    if ($sheetPath === false || $xlsxPath === false) {
+        http_response_code(500);
+        exit('Unable to create temporary export files.');
+    }
+
+    $sheet = fopen($sheetPath, 'wb');
+    if (!$sheet) {
+        @unlink($sheetPath); @unlink($xlsxPath);
+        http_response_code(500);
+        exit('Unable to write the Excel export.');
+    }
+
+    fwrite($sheet, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
+    fwrite($sheet, '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">');
+    fwrite($sheet, '<sheetViews><sheetView workbookViewId="0"><pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>');
+    fwrite($sheet, '<sheetFormatPr defaultRowHeight="15"/>');
+    fwrite($sheet, '<cols>');
+    for ($i = 1; $i <= $columnCount; $i++) {
+        $width = isset($widths[$i - 1]) ? (float)$widths[$i - 1] : min(35, max(10, mb_strlen((string)$headers[$i - 1]) + 3));
+        fwrite($sheet, '<col min="' . $i . '" max="' . $i . '" width="' . $width . '" customWidth="1"/>');
+    }
+    fwrite($sheet, '</cols><sheetData>');
+
+    fwrite($sheet, '<row r="1" ht="22" customHeight="1"><c r="A1" t="inlineStr" s="1"><is><t xml:space="preserve">' . $xmlEscape($title) . '</t></is></c></row>');
+    fwrite($sheet, '<row r="2">');
+    foreach ($headers as $index => $header) {
+        $cell = $columnName($index + 1) . '2';
+        fwrite($sheet, '<c r="' . $cell . '" t="inlineStr" s="2"><is><t xml:space="preserve">' . $xmlEscape($header) . '</t></is></c>');
+    }
+    fwrite($sheet, '</row>');
+
+    $rowNumber = 3;
+    foreach ($data as $dataRow) {
+        if ($rowNumber > 1048576) {
+            fclose($sheet); @unlink($sheetPath); @unlink($xlsxPath);
+            http_response_code(413);
+            exit('The export exceeds the Excel limit of 1,048,576 rows. Please use a narrower date range.');
+        }
+        $alternate = ($rowNumber % 2 === 0);
+        fwrite($sheet, '<row r="' . $rowNumber . '">');
+        foreach ($dataRow as $index => $value) {
+            if ($index >= $columnCount) break;
+            $cell = $columnName($index + 1) . $rowNumber;
+            if (is_int($value) || is_float($value)) {
+                $style = $alternate ? 6 : 4;
+                $number = is_finite((float)$value) ? (string)$value : '0';
+                fwrite($sheet, '<c r="' . $cell . '" s="' . $style . '"><v>' . $number . '</v></c>');
+            } else {
+                $style = $alternate ? 5 : 3;
+                fwrite($sheet, '<c r="' . $cell . '" t="inlineStr" s="' . $style . '"><is><t xml:space="preserve">' . $xmlEscape($value ?? '') . '</t></is></c>');
+            }
+        }
+        fwrite($sheet, '</row>');
+        $rowNumber++;
+    }
+    $lastRow = max(2, $rowNumber - 1);
+    fwrite($sheet, '</sheetData>');
+    fwrite($sheet, '<autoFilter ref="A2:' . $lastColumn . $lastRow . '"/>');
+    fwrite($sheet, '<mergeCells count="1"><mergeCell ref="A1:' . $lastColumn . '1"/></mergeCells>');
+    fwrite($sheet, '<pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>');
+    fwrite($sheet, '</worksheet>');
+    fclose($sheet);
+
+    $zip = new \ZipArchive();
+    if ($zip->open($xlsxPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+        @unlink($sheetPath); @unlink($xlsxPath);
+        http_response_code(500);
+        exit('Unable to package the Excel export.');
+    }
+
+    $created = gmdate('Y-m-d\TH:i:s\Z');
+    $zip->addFromString('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>');
+    $zip->addFromString('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>');
+    $zip->addFromString('docProps/app.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Inventorium</Application></Properties>');
+    $zip->addFromString('docProps/core.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:creator>Inventorium</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">' . $created . '</dcterms:created></cp:coreProperties>');
+    $zip->addFromString('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="' . $xmlEscape($safeSheet) . '" sheetId="1" r:id="rId1"/></sheets></workbook>');
+    $zip->addFromString('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
+    $zip->addFromString('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00"/></numFmts><fonts count="3"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="14"/><name val="Calibri"/><family val="2"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Calibri"/><family val="2"/></font></fonts><fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1A3A5C"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF0F4F8"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="7"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center"/></xf><xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0"/><xf numFmtId="164" fontId="0" fillId="3" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>');
+    $zip->addFile($sheetPath, 'xl/worksheets/sheet1.xml');
+    $zip->close();
+
+    @unlink($sheetPath);
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="' . $filename . '.xlsx"');
+    header('Content-Length: ' . filesize($xlsxPath));
+    header('Cache-Control: max-age=0');
+    readfile($xlsxPath);
+    @unlink($xlsxPath);
     exit;
 }
 
