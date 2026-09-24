@@ -3,6 +3,13 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/recv_filter.php';
 require_once __DIR__ . '/vendor/autoload.php';
 
+// Authentication is complete after config/db.php. Release PHP's session file
+// lock before generating a large export so other pages from the same browser
+// remain responsive while the download is being prepared.
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
@@ -606,6 +613,22 @@ function exportRecvList(string $format): void
         ORDER BY h.RecvDate DESC, h.SeqNo DESC, d.DtlNo ASC
     ";
 
+    // XLSX is a ZIP archive and cannot be sent until packaging finishes. On a
+    // slower NAS, very large exports can exceed the reverse-proxy idle timeout.
+    // CSV is streamed to the browser immediately and opens directly in Excel.
+    $useCsv = false;
+    if ($format !== 'pdf') {
+        $countResult = mysqli_query($conn, "
+            SELECT COUNT(*) AS total
+            FROM invrecv0 h
+            INNER JOIN invrecv1 d ON d.SeqNo = h.SeqNo
+            LEFT JOIN gblprod p ON p.PrdId = d.PrdID
+            WHERE $where
+        ");
+        $exportRows = (int)(($countResult ? mysqli_fetch_assoc($countResult) : null)['total'] ?? 0);
+        $useCsv = $exportRows > 50000;
+    }
+
     // Excel may contain hundreds of thousands of item lines. Use an unbuffered
     // result so neither mysqli nor PHP keeps the complete result set in RAM.
     $result = mysqli_query($conn, $sql, $format === 'pdf' ? MYSQLI_STORE_RESULT : MYSQLI_USE_RESULT);
@@ -655,6 +678,9 @@ function exportRecvList(string $format): void
         $dataRows = (function() use ($result, $rowForExport) {
             while ($r = mysqli_fetch_assoc($result)) yield $rowForExport($r);
         })();
+        if ($useCsv) {
+            outputCsvStreamed($headers, $dataRows, 'recv_list_' . date('Ymd'));
+        }
         outputExcelStreamed(
             $title,
             $headers,
@@ -1024,6 +1050,37 @@ function exportItemDetail(string $format): void
     } else {
         outputExcel($title, $headers, $data, 'item_detail_' . $prd_id . '_' . date('Ymd'));
     }
+}
+
+// ─── CSV output for very large Excel-compatible reports ────────────────────
+function outputCsvStreamed(array $headers, iterable $data, string $filename): void
+{
+    @set_time_limit(0);
+    while (ob_get_level() > 0) ob_end_clean();
+
+    header('Content-Type: text/csv; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="' . $filename . '.csv"');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    header('X-Accel-Buffering: no');
+
+    $out = fopen('php://output', 'wb');
+    fwrite($out, "\xEF\xBB\xBF"); // UTF-8 BOM for Thai text in Excel
+    fputcsv($out, $headers);
+    fflush($out);
+    if (function_exists('flush')) flush();
+
+    $rowCount = 0;
+    foreach ($data as $row) {
+        fputcsv($out, $row);
+        $rowCount++;
+        if ($rowCount % 500 === 0) {
+            fflush($out);
+            if (function_exists('flush')) flush();
+            if (connection_aborted()) break;
+        }
+    }
+    fclose($out);
+    exit;
 }
 
 // ─── Excel output ───────────────────────────────────────────────────────────
